@@ -1,0 +1,67 @@
+{
+  "name": "mandelbrot-visualizer",
+  "version": "1.0.0",
+  "description": "Interactive Mandelbrot set explorer with auto-zoom video feature",
+  "main": "main.js",
+  "author": "OutBlade",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win --x64 --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.0"
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.outblade.mandelbrot",
+    "productName": "Mandelbrot Visualizer",
+    "copyright": "Copyright 2026 OutBlade",
+    "asar": true,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "OutBlade",
+        "repo": "mandelbrot-visualizer",
+        "releaseType": "release"
+      }
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "artifactName": "MandelbrotVisualizerSetup-${version}.exe",
+      "publisherName": "OutBlade",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Mandelbrot Visualizer"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.graphics"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Graphics"
+    }
+  }
+}
