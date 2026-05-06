@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mandelbrot Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0a0a0f;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .subtitle {
+            color: #888;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+        .canvas-container {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(102, 126, 234, 0.3);
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: 500;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+        }
+        .btn-secondary {
+            background: #1a1a2e;
+            color: #fff;
+            border: 1px solid #333;
+        }
+        .btn-secondary:hover {
+            background: #252540;
+        }
+        .info {
+            margin-top: 20px;
+            padding: 16px 24px;
+            background: #1a1a2e;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #aaa;
+            max-width: 800px;
+            text-align: center;
+        }
+        .info span {
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <h1>Mandelbrot Visualizer</h1>
+    <p class="subtitle">Interactive fractal explorer</p>
+    <div class="canvas-container">
+        <canvas id="mandelbrot" width="800" height="600"></canvas>
+    </div>
+    <div class="controls">
+        <button class="btn-primary" onclick="zoomIn()">Zoom In</button>
+        <button class="btn-primary" onclick="zoomOut()">Zoom Out</button>
+        <button class="btn-secondary" onclick="resetView()">Reset View</button>
+        <button class="btn-secondary" onclick="toggleColoring()">Change Colors</button>
+    </div>
+    <div class="info">
+        <p>Click and drag to pan | Scroll to zoom | <span id="coords">Center: -0.5 + 0i | Zoom: 1x</span></p>
+    </div>
+    <script>
+        const canvas = document.getElementById('mandelbrot');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        let centerX = -0.5;
+        let centerY = 0;
+        let zoom = 1;
+        let maxIterations = 100;
+        let colorScheme = 0;
+
+        const colorSchemes = [
+            { name: 'Electric', colors: ['#000000', '#6600ff', '#00ccff', '#00ff66', '#ffff00', '#ff6600', '#ff0000', '#ffffff'] },
+            { name: 'Ocean', colors: ['#000033', '#001a4d', '#003366', '#006666', '#00cccc', '#66ffff', '#ffffff'] },
+            { name: 'Sunset', colors: ['#0d0221', '#2d1b4e', '#5c3d7a', '#8f5da6', '#c27dbd', '#f0a0d0', '#ffd6e7', '#fff0f5'] },
+            { name: 'Grayscale', colors: ['#000000', '#444444', '#888888', '#cccccc', '#ffffff'] }
+        ];
+
+        function getColor(iterations) {
+            if (iterations === maxIterations) return [0, 0, 0];
+            const scheme = colorSchemes[colorScheme].colors;
+            const t = (iterations % 100) / 100;
+            const idx = t * (scheme.length - 1);
+            const i = Math.floor(idx);
+            const f = idx - i;
+            const c1 = hexToRgb(scheme[i]);
+            const c2 = hexToRgb(scheme[Math.min(i + 1, scheme.length - 1)]);
+            return [
+                Math.round(c1.r + f * (c2.r - c1.r)),
+                Math.round(c1.g + f * (c2.g - c1.g)),
+                Math.round(c1.b + f * (c2.b - c1.b))
+            ];
+        }
+
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : { r: 0, g: 0, b: 0 };
+        }
+
+        function mandelbrot(x, y) {
+            let zr = 0, zi = 0;
+            let zr2 = 0, zi2 = 0;
+            let iterations = 0;
+            while (zr2 + zi2 <= 4 && iterations < maxIterations) {
+                zi = 2 * zr * zi + y;
+                zr = zr2 - zi2 + x;
+                zr2 = zr * zr;
+                zi2 = zi * zi;
+                iterations++;
+            }
+            return iterations;
+        }
+
+        function render() {
+            const imageData = ctx.createImageData(width, height);
+            const aspectRatio = width / height;
+            const rangeY = 3 / zoom;
+            const rangeX = rangeY * aspectRatio;
+
+            for (let py = 0; py < height; py++) {
+                const y0 = centerY - rangeY / 2 + (py / height) * rangeY;
+                for (let px = 0; px < width; px++) {
+                    const x0 = centerX - rangeX / 2 + (px / width) * rangeX;
+                    const iterations = mandelbrot(x0, y0);
+                    const [r, g, b] = getColor(iterations);
+                    const idx = (py * width + px) * 4;
+                    imageData.data[idx] = r;
+                    imageData.data[idx + 1] = g;
+                    imageData.data[idx + 2] = b;
+                    imageData.data[idx + 3] = 255;
+                }
+            }
+            ctx.putImageData(imageData, 0, 0);
+            updateCoords();
+        }
+
+        function updateCoords() {
+            document.getElementById('coords').textContent =
+                `Center: ${centerX.toFixed(6)} ${centerY >= 0 ? '+' : ''}${centerY.toFixed(6)}i | Zoom: ${zoom.toFixed(1)}x`;
+        }
+
+        function zoomIn() {
+            zoom *= 2;
+            render();
+        }
+
+        function zoomOut() {
+            zoom = Math.max(1, zoom / 2);
+            render();
+        }
+
+        function resetView() {
+            centerX = -0.5;
+            centerY = 0;
+            zoom = 1;
+            render();
+        }
+
+        function toggleColoring() {
+            colorScheme = (colorScheme + 1) % colorSchemes.length;
+            render();
+        }
+
+        let isDragging = false;
+        let lastX, lastY;
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastX = e.clientX;
+            lastY = e.clientY;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - lastX;
+            const dy = e.clientY - lastY;
+            const aspectRatio = width / height;
+            const rangeY = 3 / zoom;
+            const rangeX = rangeY * aspectRatio;
+            centerX -= (dx / width) * rangeX;
+            centerY -= (dy / height) * rangeY;
+            lastX = e.clientX;
+            lastY = e.clientY;
+            render();
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            isDragging = false;
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const aspectRatio = width / height;
+            const rangeY = 3 / zoom;
+            const rangeX = rangeY * aspectRatio;
+            const x0 = centerX - rangeX / 2 + (mouseX / width) * rangeX;
+            const y0 = centerY - rangeY / 2 + (mouseY / height) * rangeY;
+            zoom *= zoomFactor;
+            const newRangeY = 3 / zoom;
+            const newRangeX = newRangeY * aspectRatio;
+            centerX = x0 + (mouseX / width) * newRangeX - newRangeX / 2;
+            centerY = y0 + (mouseY / height) * newRangeY - newRangeY / 2;
+            render();
+        });
+
+        render();
+    </script>
+</body>
+</html>
