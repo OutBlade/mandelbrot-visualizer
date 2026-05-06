@@ -27,9 +27,6 @@ function createWindow() {
 }
 
 function setupAutoUpdater() {
-  autoUpdater.logger = require('electron-log');
-  autoUpdater.logger.transports.file.level = 'info';
-
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 

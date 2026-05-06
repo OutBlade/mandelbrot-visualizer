@@ -203,7 +203,7 @@
     <div class="header">
         <h1>Mandelbrot Visualizer</h1>
         <div class="perf-stats">
-            FPS: <span id="fps">0</span> | Render: <span id="renderTime">0</span>ms | Workers: <span id="workers">0</span>
+            FPS: <span id="fps">0</span> | Render: <span id="renderTime">0</span>ms
         </div>
     </div>
 
@@ -238,27 +238,27 @@
 
             <div class="panel">
                 <div class="panel-title">Navigation</div>
-                <button class="btn btn-secondary" onclick="zoomIn()">Zoom In</button>
-                <button class="btn btn-secondary" onclick="zoomOut()">Zoom Out</button>
-                <button class="btn btn-secondary" onclick="resetView()">Reset View</button>
+                <button class="btn btn-secondary" id="zoomInBtn">Zoom In</button>
+                <button class="btn btn-secondary" id="zoomOutBtn">Zoom Out</button>
+                <button class="btn btn-secondary" id="resetBtn">Reset View</button>
                 <div class="panel-title" style="margin-top: 10px;">Zoom Presets</div>
                 <div class="preset-grid">
-                    <button class="preset-btn" onclick="goToPreset('spiral')">Spiral Valley</button>
-                    <button class="preset-btn" onclick="goToPreset('seahorse')">Seahorse</button>
-                    <button class="preset-btn" onclick="goToPreset('elephant')">Elephant</button>
-                    <button class="preset-btn" onclick="goToPreset('bug')">Buggy</button>
-                    <button class="preset-btn" onclick="goToPreset('triple')">Triple</button>
-                    <button class="preset-btn" onclick="goToPreset('crystal')">Crystal</button>
+                    <button class="preset-btn" data-preset="spiral">Spiral</button>
+                    <button class="preset-btn" data-preset="seahorse">Seahorse</button>
+                    <button class="preset-btn" data-preset="elephant">Elephant</button>
+                    <button class="preset-btn" data-preset="bug">Buggy</button>
+                    <button class="preset-btn" data-preset="triple">Triple</button>
+                    <button class="preset-btn" data-preset="crystal">Crystal</button>
                 </div>
             </div>
 
             <div class="panel">
                 <div class="panel-title">Coloring</div>
                 <div class="color-grid">
-                    <button class="color-btn active" onclick="setColorScheme(0)">Electric</button>
-                    <button class="color-btn" onclick="setColorScheme(1)">Ocean</button>
-                    <button class="color-btn" onclick="setColorScheme(2)">Sunset</button>
-                    <button class="color-btn" onclick="setColorScheme(3)">Gray</button>
+                    <button class="color-btn active" data-color="0">Electric</button>
+                    <button class="color-btn" data-color="1">Ocean</button>
+                    <button class="color-btn" data-color="2">Sunset</button>
+                    <button class="color-btn" data-color="3">Gray</button>
                 </div>
                 <div class="slider-container" style="margin-top: 8px;">
                     <div class="slider-label">
@@ -281,30 +281,11 @@
         const width = canvas.width;
         const height = canvas.height;
 
-        const colorSchemes = [
-            {
-                name: 'Electric',
-                r: [0, 80, 130, 20, 200, 255, 255, 255],
-                g: [0, 20, 200, 255, 50, 100, 0, 255],
-                b: [0, 255, 255, 50, 0, 0, 0, 255]
-            },
-            {
-                name: 'Ocean',
-                r: [0, 0, 0, 0, 100, 102, 255],
-                g: [0, 26, 51, 102, 153, 204, 255],
-                b: [51, 77, 102, 153, 204, 255, 255]
-            },
-            {
-                name: 'Sunset',
-                r: [13, 45, 92, 143, 194, 242, 255, 255],
-                g: [2, 27, 61, 93, 125, 160, 214, 255],
-                b: [33, 78, 122, 166, 189, 208, 231, 245]
-            },
-                name: 'Grayscale',
-                r: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255],
-                g: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255],
-                b: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255]
-            }
+        const colorTables = [
+            { r: [0, 80, 130, 20, 200, 255, 255, 255], g: [0, 20, 200, 255, 50, 100, 0, 255], b: [0, 255, 255, 50, 0, 0, 0, 255] },
+            { r: [0, 0, 0, 0, 100, 102, 255], g: [0, 26, 51, 102, 153, 204, 255], b: [51, 77, 102, 153, 204, 255, 255] },
+            { r: [13, 45, 92, 143, 194, 242, 255, 255], g: [2, 27, 61, 93, 125, 160, 214, 255], b: [33, 78, 122, 166, 189, 208, 231, 245] },
+            { r: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255], g: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255], b: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255] }
         ];
 
         let centerX = -0.5;
@@ -312,7 +293,6 @@
         let zoom = 1;
         let maxIterations = 256;
         let colorScheme = 0;
-
         let isRecording = false;
         let recordStartTime = 0;
         let recordDuration = 30;
@@ -320,6 +300,7 @@
         let recordFrame = 0;
         let animationId = null;
         let pendingRender = false;
+        let imageData = null;
 
         const presets = {
             spiral: { x: -0.761574, y: -0.0847596, zoom: 50000 },
@@ -331,79 +312,73 @@
         };
 
         const TILE_SIZE = 32;
-        const NUM_WORKERS = navigator.hardwareConcurrency || 4;
         let workers = [];
-        let workerPool = [];
         let activeTiles = 0;
-        let completedTiles = 0;
-        let imageData = null;
-        let pendingImageData = null;
         let renderStartTime = 0;
 
         function createWorkers() {
+            const numWorkers = navigator.hardwareConcurrency || 4;
             const code = `
                 const TILE_SIZE = 32;
-                const colorTables = {
-                    0: { r: [0, 80, 130, 20, 200, 255, 255, 255], g: [0, 20, 200, 255, 50, 100, 0, 255], b: [0, 255, 255, 50, 0, 0, 0, 255] },
-                    1: { r: [0, 0, 0, 0, 100, 102, 255], g: [0, 26, 51, 102, 153, 204, 255], b: [51, 77, 102, 153, 204, 255, 255] },
-                    2: { r: [13, 45, 92, 143, 194, 242, 255, 255], g: [2, 27, 61, 93, 125, 160, 214, 255], b: [33, 78, 122, 166, 189, 208, 231, 245] },
-                    3: { r: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255], g: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255], b: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255] }
-                };
-
-                function mandelbrot(px, py, width, height, centerX, centerY, zoom, maxIter, schemeIdx) {
-                    const aspectRatio = width / height;
-                    const rangeY = 3 / zoom;
-                    const rangeX = rangeY * aspectRatio;
-                    const scheme = colorTables[schemeIdx];
-
-                    const results = new Uint8Array(TILE_SIZE * TILE_SIZE * 4);
-                    const len = scheme.r.length;
-                    const len1 = len - 1;
-
-                    for (let ty = 0; ty < TILE_SIZE && py + ty < height; ty++) {
-                        const y0 = centerY - rangeY / 2 + ((py + ty) / height) * rangeY;
-                        for (let tx = 0; tx < TILE_SIZE && px + tx < width; tx++) {
-                            const x0 = centerX - rangeX / 2 + ((px + tx) / width) * rangeX;
-
-                            let zr = 0, zi = 0, zr2 = 0, zi2 = 0;
-                            let iter = 0;
-
-                            while (zr2 + zi2 <= 4 && iter < maxIter) {
-                                zi = 2 * zr * zi + y0;
-                                zr = zr2 - zi2 + x0;
-                                zr2 = zr * zr;
-                                zi2 = zi * zi;
-                                iter++;
-                            }
-
-                            const idx = (ty * TILE_SIZE + tx) * 4;
-                            if (iter === maxIter) {
-                                results[idx] = 5;
-                                results[idx + 1] = 5;
-                                results[idx + 2] = 15;
-                            } else {
-                                const t = (iter % 100) / 100 * len1;
-                                const i = t | 0;
-                                const f = t - i;
-                                const r1 = scheme.r[i], r2 = scheme.r[Math.min(i + 1, len1)];
-                                const g1 = scheme.g[i], g2 = scheme.g[Math.min(i + 1, len1)];
-                                const b1 = scheme.b[i], b2 = scheme.b[Math.min(i + 1, len1)];
-                                results[idx] = (r1 + f * (r2 - r1) + 0.5) | 0;
-                                results[idx + 1] = (g1 + f * (g2 - g1) + 0.5) | 0;
-                                results[idx + 2] = (b1 + f * (b2 - b1) + 0.5) | 0;
-                            }
-                            results[idx + 3] = 255;
-                        }
-                    }
-                    return results;
-                }
-
+                const colorTables = [
+                    { r: [0, 80, 130, 20, 200, 255, 255, 255], g: [0, 20, 200, 255, 50, 100, 0, 255], b: [0, 255, 255, 50, 0, 0, 0, 255] },
+                    { r: [0, 0, 0, 0, 100, 102, 255], g: [0, 26, 51, 102, 153, 204, 255], b: [51, 77, 102, 153, 204, 255, 255] },
+                    { r: [13, 45, 92, 143, 194, 242, 255, 255], g: [2, 27, 61, 93, 125, 160, 214, 255], b: [33, 78, 122, 166, 189, 208, 231, 245] },
+                    { r: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255], g: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255], b: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255] }
+                ];
                 self.onmessage = function(e) {
-                    const { type, data } = e.data;
-                    if (type === 'render') {
-                        const { x, y, w, h, centerX, centerY, zoom, maxIter, schemeIdx, tileId } = data;
-                        const result = mandelbrot(x, y, w, h, centerX, centerY, zoom, maxIter, schemeIdx);
-                        self.postMessage({ type: 'tile', tileId, x, y, data: result.buffer }, [result.buffer]);
+                    var data = e.data;
+                    if (data.type === 'render') {
+                        var tileId = data.tileId;
+                        var px = data.x;
+                        var py = data.y;
+                        var w = data.width;
+                        var h = data.height;
+                        var cx = data.centerX;
+                        var cy = data.centerY;
+                        var z = data.zoom;
+                        var maxIter = data.maxIter;
+                        var schemeIdx = data.schemeIdx;
+                        var aspectRatio = w / h;
+                        var rangeY = 3 / z;
+                        var rangeX = rangeY * aspectRatio;
+                        var scheme = colorTables[schemeIdx];
+                        var results = new Uint8Array(TILE_SIZE * TILE_SIZE * 4);
+                        var len = scheme.r.length;
+                        var len1 = len - 1;
+                        for (var ty = 0; ty < TILE_SIZE && py + ty < h; ty++) {
+                            var y0 = cy - rangeY / 2 + ((py + ty) / h) * rangeY;
+                            for (var tx = 0; tx < TILE_SIZE && px + tx < w; tx++) {
+                                var x0 = cx - rangeX / 2 + ((px + tx) / w) * rangeX;
+                                var zr = 0, zi = 0, zr2 = 0, zi2 = 0;
+                                var iter = 0;
+                                while (zr2 + zi2 <= 4 && iter < maxIter) {
+                                    zi = 2 * zr * zi + y0;
+                                    zr = zr2 - zi2 + x0;
+                                    zr2 = zr * zr;
+                                    zi2 = zi * zi;
+                                    iter++;
+                                }
+                                var idx = (ty * TILE_SIZE + tx) * 4;
+                                if (iter === maxIter) {
+                                    results[idx] = 5;
+                                    results[idx + 1] = 5;
+                                    results[idx + 2] = 15;
+                                } else {
+                                    var t = (iter % 100) / 100 * len1;
+                                    var i = t | 0;
+                                    var f = t - i;
+                                    var r1 = scheme.r[i], r2 = scheme.r[Math.min(i + 1, len1)];
+                                    var g1 = scheme.g[i], g2 = scheme.g[Math.min(i + 1, len1)];
+                                    var b1 = scheme.b[i], b2 = scheme.b[Math.min(i + 1, len1)];
+                                    results[idx] = (r1 + f * (r2 - r1) + 0.5) | 0;
+                                    results[idx + 1] = (g1 + f * (g2 - g1) + 0.5) | 0;
+                                    results[idx + 2] = (b1 + f * (b2 - b1) + 0.5) | 0;
+                                }
+                                results[idx + 3] = 255;
+                            }
+                        }
+                        self.postMessage({ type: 'tile', tileId: tileId, x: px, y: py, data: results.buffer }, [results.buffer]);
                     }
                 };
             `;
@@ -411,28 +386,25 @@
             const blob = new Blob([code], { type: 'application/javascript' });
             const url = URL.createObjectURL(blob);
 
-            for (let i = 0; i < NUM_WORKERS; i++) {
+            for (let i = 0; i < numWorkers; i++) {
                 const worker = new Worker(url);
                 worker.onmessage = onWorkerMessage;
                 workers.push(worker);
-                workerPool.push({ worker, busy: false });
             }
-            document.getElementById('workers').textContent = NUM_WORKERS;
         }
 
         function onWorkerMessage(e) {
-            const { type, tileId, x, y, data } = e.data;
-            if (type === 'tile') {
-                const buf = new Uint8Array(data);
-                const tileX = tileId % Math.ceil(width / TILE_SIZE);
-                const tileY = (tileId / Math.ceil(width / TILE_SIZE)) | 0;
-                const destX = tileX * TILE_SIZE;
-                const destY = tileY * TILE_SIZE;
+            if (e.data.type === 'tile') {
+                var buf = new Uint8Array(e.data.data);
+                var tileX = e.data.x / TILE_SIZE;
+                var tileY = e.data.y / TILE_SIZE;
+                var destX = e.data.x;
+                var destY = e.data.y;
 
-                for (let ty = 0; ty < TILE_SIZE && destY + ty < height; ty++) {
-                    for (let tx = 0; tx < TILE_SIZE && destX + tx < width; tx++) {
-                        const srcIdx = (ty * TILE_SIZE + tx) * 4;
-                        const destIdx = ((destY + ty) * width + (destX + tx)) * 4;
+                for (var ty = 0; ty < TILE_SIZE && destY + ty < height; ty++) {
+                    for (var tx = 0; tx < TILE_SIZE && destX + tx < width; tx++) {
+                        var srcIdx = (ty * TILE_SIZE + tx) * 4;
+                        var destIdx = ((destY + ty) * width + (destX + tx)) * 4;
                         imageData.data[destIdx] = buf[srcIdx];
                         imageData.data[destIdx + 1] = buf[srcIdx + 1];
                         imageData.data[destIdx + 2] = buf[srcIdx + 2];
@@ -441,15 +413,15 @@
                 }
 
                 activeTiles--;
-                if (activeTiles === 0 && completedTiles === Math.ceil(width / TILE_SIZE) * Math.ceil(height / TILE_SIZE)) {
+                if (activeTiles === 0) {
                     ctx.putImageData(imageData, 0, 0);
-                    const elapsed = performance.now() - renderStartTime;
+                    var elapsed = performance.now() - renderStartTime;
                     document.getElementById('renderTime').textContent = elapsed.toFixed(1);
                 }
             }
         }
 
-        function renderAsync() {
+        function render() {
             if (pendingRender) return;
             pendingRender = true;
             requestAnimationFrame(doRender);
@@ -460,58 +432,52 @@
             if (!imageData) imageData = ctx.createImageData(width, height);
 
             renderStartTime = performance.now();
-            const tilesX = Math.ceil(width / TILE_SIZE);
-            const tilesY = Math.ceil(height / TILE_SIZE);
-            activeTiles = 0;
-            completedTiles = 0;
+            var tilesX = Math.ceil(width / TILE_SIZE);
+            var tilesY = Math.ceil(height / TILE_SIZE);
+            activeTiles = tilesX * tilesY;
+            var workerIdx = 0;
 
-            let idleWorker = workerPool.find(w => !w.busy);
-            for (let ty = 0; ty < tilesY; ty++) {
-                for (let tx = 0; tx < tilesX; tx++) {
-                    if (idleWorker) {
-                        idleWorker.busy = true;
-                        activeTiles++;
-                        idleWorker.worker.postMessage({
-                            type: 'render',
-                            data: {
-                                tileId: ty * tilesX + tx,
-                                x: tx * TILE_SIZE,
-                                y: ty * TILE_SIZE,
-                                w: width,
-                                h: height,
-                                centerX, centerY, zoom,
-                                maxIter: maxIterations,
-                                schemeIdx: colorScheme
-                            }
-                        });
-                        idleWorker = workerPool.find(w => !w.busy);
-                    }
+            for (var ty = 0; ty < tilesY; ty++) {
+                for (var tx = 0; tx < tilesX; tx++) {
+                    var px = tx * TILE_SIZE;
+                    var py = ty * TILE_SIZE;
+                    workers[workerIdx % workers.length].postMessage({
+                        type: 'render',
+                        tileId: ty * tilesX + tx,
+                        x: px,
+                        y: py,
+                        width: width,
+                        height: height,
+                        centerX: centerX,
+                        centerY: centerY,
+                        zoom: zoom,
+                        maxIter: maxIterations,
+                        schemeIdx: colorScheme
+                    });
+                    workerIdx++;
                 }
             }
         }
 
-        let lastFpsTime = performance.now();
-        let frameCount = 0;
-
-        function tick() {
-            frameCount++;
-            const now = performance.now();
-            if (now - lastFpsTime >= 1000) {
-                document.getElementById('fps').textContent = frameCount;
-                frameCount = 0;
-                lastFpsTime = now;
+        var frameCount = 0;
+        var lastFpsTime = performance.now();
+        function updateFPS() {
+            if (!isRecording) {
+                frameCount++;
+                var now = performance.now();
+                if (now - lastFpsTime >= 1000) {
+                    document.getElementById('fps').textContent = frameCount;
+                    frameCount = 0;
+                    lastFpsTime = now;
+                }
             }
-            if (!isRecording) requestAnimationFrame(tick);
+            requestAnimationFrame(updateFPS);
         }
-
-        createWorkers();
-        renderAsync();
-        tick();
 
         function updateCoords() {
             document.getElementById('coords').textContent =
-                `Center: ${centerX.toFixed(6)} ${centerY >= 0 ? '+' : ''}${centerY.toFixed(6)}i`;
-            document.getElementById('zoom').textContent = `Zoom: ${formatZoom(zoom)}`;
+                'Center: ' + centerX.toFixed(6) + ' ' + (centerY >= 0 ? '+' : '') + centerY.toFixed(6) + 'i';
+            document.getElementById('zoom').textContent = 'Zoom: ' + formatZoom(zoom);
         }
 
         function formatZoom(z) {
@@ -526,14 +492,14 @@
             stopRecording();
             zoom *= 1.5;
             updateCoords();
-            renderAsync();
+            render();
         }
 
         function zoomOut() {
             stopRecording();
             zoom = Math.max(1, zoom / 1.5);
             updateCoords();
-            renderAsync();
+            render();
         }
 
         function resetView() {
@@ -542,46 +508,28 @@
             centerY = 0;
             zoom = 1;
             updateCoords();
-            renderAsync();
+            render();
         }
 
         function setColorScheme(idx) {
             colorScheme = idx;
-            document.querySelectorAll('.color-btn').forEach((btn, i) => {
-                btn.classList.toggle('active', i === idx);
+            document.querySelectorAll('.color-btn').forEach(function(btn) {
+                btn.classList.toggle('active', parseInt(btn.dataset.color) === idx);
             });
-            renderAsync();
+            render();
         }
 
         function goToPreset(name) {
             stopRecording();
-            const p = presets[name];
-            centerX = p.x;
-            centerY = p.y;
-            zoom = p.zoom;
-            updateCoords();
-            renderAsync();
+            var p = presets[name];
+            if (p) {
+                centerX = p.x;
+                centerY = p.y;
+                zoom = p.zoom;
+                updateCoords();
+                render();
+            }
         }
-
-        document.getElementById('iterations').addEventListener('input', (e) => {
-            maxIterations = parseInt(e.target.value);
-            document.getElementById('iterVal').textContent = maxIterations;
-            renderAsync();
-        });
-
-        document.getElementById('duration').addEventListener('input', (e) => {
-            recordDuration = parseInt(e.target.value);
-            document.getElementById('durationVal').textContent = recordDuration;
-        });
-
-        document.getElementById('speed').addEventListener('input', (e) => {
-            recordSpeed = parseFloat(e.target.value);
-            document.getElementById('speedVal').textContent = recordSpeed.toFixed(1) + 'x';
-        });
-
-        const recordBtn = document.getElementById('recordBtn');
-        const videoProgress = document.getElementById('videoProgress');
-        const progressText = document.getElementById('progressText');
 
         function startRecording() {
             isRecording = true;
@@ -590,48 +538,47 @@
             centerX = -0.5;
             centerY = 0;
             zoom = 1;
-            recordBtn.textContent = 'Stop Recording';
-            recordBtn.classList.add('active');
+            document.getElementById('recordBtn').textContent = 'Stop Recording';
+            document.getElementById('recordBtn').classList.add('active');
             updateCoords();
-            renderAsync();
+            render();
             recordTick();
         }
 
         function stopRecording() {
             isRecording = false;
-            recordBtn.textContent = 'Start Recording';
-            recordBtn.classList.remove('active');
+            document.getElementById('recordBtn').textContent = 'Start Recording';
+            document.getElementById('recordBtn').classList.remove('active');
             if (animationId) {
                 cancelAnimationFrame(animationId);
                 animationId = null;
             }
-            videoProgress.style.width = '0%';
-            progressText.textContent = 'Ready to record';
-            tick();
+            document.getElementById('videoProgress').style.width = '0%';
+            document.getElementById('progressText').textContent = 'Ready to record';
         }
 
         function recordTick() {
             if (!isRecording) return;
 
-            const elapsed = (Date.now() - recordStartTime) / 1000;
-            const progress = Math.min(elapsed / recordDuration, 1);
-            videoProgress.style.width = (progress * 100) + '%';
+            var elapsed = (Date.now() - recordStartTime) / 1000;
+            var progress = Math.min(elapsed / recordDuration, 1);
+            document.getElementById('videoProgress').style.width = (progress * 100) + '%';
 
-            const remaining = Math.ceil(recordDuration - elapsed);
-            progressText.textContent = `${formatTime(elapsed)} / ${formatTime(recordDuration)} | Frame ${recordFrame++}`;
+            document.getElementById('progressText').textContent = formatTime(elapsed) + ' / ' + formatTime(recordDuration) + ' | Frame ' + recordFrame;
 
-            const targetZoom = 1e12;
-            const zoomProgress = progress * progress * progress;
+            var targetZoom = 1e12;
+            var zoomProgress = progress * progress * progress;
             zoom = Math.pow(targetZoom, zoomProgress);
 
             updateCoords();
-            renderAsync();
+            render();
+            recordFrame++;
 
             if (elapsed >= recordDuration) {
-                progressText.textContent = `Complete! ${recordFrame} frames captured.`;
+                document.getElementById('progressText').textContent = 'Complete! ' + recordFrame + ' frames captured.';
                 isRecording = false;
-                recordBtn.textContent = 'Start Recording';
-                recordBtn.classList.remove('active');
+                document.getElementById('recordBtn').textContent = 'Start Recording';
+                document.getElementById('recordBtn').classList.remove('active');
                 return;
             }
 
@@ -639,68 +586,106 @@
         }
 
         function formatTime(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins}:${secs.toString().padStart(2, '0')}`;
+            var mins = Math.floor(seconds / 60);
+            var secs = Math.floor(seconds % 60);
+            return mins + ':' + (secs < 10 ? '0' : '') + secs;
         }
 
-        recordBtn.addEventListener('click', () => {
+        // Event listeners
+        document.getElementById('zoomInBtn').addEventListener('click', zoomIn);
+        document.getElementById('zoomOutBtn').addEventListener('click', zoomOut);
+        document.getElementById('resetBtn').addEventListener('click', resetView);
+        document.getElementById('recordBtn').addEventListener('click', function() {
             if (isRecording) stopRecording();
             else startRecording();
         });
 
-        let isDragging = false;
-        let lastX, lastY;
+        document.querySelectorAll('.color-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                setColorScheme(parseInt(this.dataset.color));
+            });
+        });
 
-        canvas.addEventListener('mousedown', (e) => {
+        document.querySelectorAll('.preset-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                goToPreset(this.dataset.preset);
+            });
+        });
+
+        document.getElementById('iterations').addEventListener('input', function() {
+            maxIterations = parseInt(this.value);
+            document.getElementById('iterVal').textContent = maxIterations;
+            render();
+        });
+
+        document.getElementById('duration').addEventListener('input', function() {
+            recordDuration = parseInt(this.value);
+            document.getElementById('durationVal').textContent = recordDuration;
+        });
+
+        document.getElementById('speed').addEventListener('input', function() {
+            recordSpeed = parseFloat(this.value);
+            document.getElementById('speedVal').textContent = recordSpeed.toFixed(1) + 'x';
+        });
+
+        // Mouse drag panning
+        var isDragging = false;
+        var lastX, lastY;
+
+        canvas.addEventListener('mousedown', function(e) {
             isDragging = true;
             lastX = e.clientX;
             lastY = e.clientY;
         });
 
-        canvas.addEventListener('mousemove', (e) => {
+        canvas.addEventListener('mousemove', function(e) {
             if (!isDragging || isRecording) return;
-            const rect = canvas.getBoundingClientRect();
-            const dx = e.clientX - lastX;
-            const dy = e.clientY - lastY;
-            const aspectRatio = width / height;
-            const rangeY = 3 / zoom;
-            const rangeX = rangeY * aspectRatio;
+            var dx = e.clientX - lastX;
+            var dy = e.clientY - lastY;
+            var aspectRatio = width / height;
+            var rangeY = 3 / zoom;
+            var rangeX = rangeY * aspectRatio;
             centerX -= (dx / width) * rangeX;
             centerY -= (dy / height) * rangeY;
             lastX = e.clientX;
             lastY = e.clientY;
             updateCoords();
-            renderAsync();
+            render();
         });
 
-        canvas.addEventListener('mouseup', () => { isDragging = false; });
-        canvas.addEventListener('mouseleave', () => { isDragging = false; });
+        canvas.addEventListener('mouseup', function() { isDragging = false; });
+        canvas.addEventListener('mouseleave', function() { isDragging = false; });
 
-        canvas.addEventListener('wheel', (e) => {
+        canvas.addEventListener('wheel', function(e) {
             e.preventDefault();
             if (isRecording) return;
 
-            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            const aspectRatio = width / height;
-            const rangeY = 3 / zoom;
-            const rangeX = rangeY * aspectRatio;
-            const x0 = centerX - rangeX / 2 + (mouseX / width) * rangeX;
-            const y0 = centerY - rangeY / 2 + (mouseY / height) * rangeY;
+            var zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            var rect = canvas.getBoundingClientRect();
+            var mouseX = e.clientX - rect.left;
+            var mouseY = e.clientY - rect.top;
+            var aspectRatio = width / height;
+            var rangeY = 3 / zoom;
+            var rangeX = rangeY * aspectRatio;
+            var x0 = centerX - rangeX / 2 + (mouseX / width) * rangeX;
+            var y0 = centerY - rangeY / 2 + (mouseY / height) * rangeY;
 
             zoom *= zoomFactor;
 
-            const newRangeY = 3 / zoom;
-            const newRangeX = newRangeY * aspectRatio;
+            var newRangeY = 3 / zoom;
+            var newRangeX = newRangeY * aspectRatio;
             centerX = x0 + (mouseX / width) * newRangeX - newRangeX / 2;
             centerY = y0 + (mouseY / height) * newRangeY - newRangeY / 2;
 
             updateCoords();
-            renderAsync();
+            render();
         });
+
+        // Initialize
+        createWorkers();
+        updateCoords();
+        render();
+        updateFPS();
     </script>
 </body>
 </html>
