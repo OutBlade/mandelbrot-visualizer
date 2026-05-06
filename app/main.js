@@ -6,10 +6,10 @@ let mainWindow;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
+    width: 1200,
+    height: 900,
+    minWidth: 900,
+    minHeight: 700,
     backgroundColor: '#0a0a0f',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'blob:'; style-src 'self' 'unsafe-inline';">
     <title>Mandelbrot Visualizer</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -15,33 +15,40 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 16px;
+            padding: 12px;
             overflow: hidden;
         }
         .header {
             text-align: center;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }
         h1 {
-            font-size: 1.8rem;
+            font-size: 1.6rem;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
-        .subtitle {
+        .perf-stats {
+            font-size: 0.7rem;
             color: #888;
-            font-size: 0.8rem;
-            margin-top: 4px;
+            background: #1a1a2e;
+            padding: 4px 10px;
+            border-radius: 12px;
         }
+        .perf-stats span { color: #667eea; }
         .main-container {
             display: flex;
-            gap: 16px;
-            max-width: 1400px;
-            width: 100%;
+            gap: 14px;
             flex: 1;
+            max-width: 1600px;
+            width: 100%;
+            min-height: 0;
         }
-        .canvas-container {
+        .canvas-wrapper {
             position: relative;
             border-radius: 10px;
             overflow: hidden;
@@ -56,33 +63,33 @@
         .sidebar {
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            min-width: 220px;
-            flex: 1;
+            gap: 10px;
+            min-width: 210px;
+            overflow-y: auto;
         }
         .panel {
             background: #1a1a2e;
             border-radius: 10px;
-            padding: 14px;
+            padding: 12px;
         }
         .panel-title {
-            font-size: 0.85rem;
+            font-size: 0.75rem;
             font-weight: 600;
             color: #667eea;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
         .btn {
             width: 100%;
-            padding: 10px 14px;
-            font-size: 0.85rem;
+            padding: 9px 12px;
+            font-size: 0.8rem;
             border: none;
             border-radius: 6px;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.15s ease;
             font-weight: 500;
-            margin-bottom: 6px;
+            margin-bottom: 5px;
         }
         .btn:hover { transform: translateY(-1px); }
         .btn:active { transform: translateY(0); }
@@ -99,7 +106,7 @@
             background: #dc3545;
             color: #fff;
         }
-        .btn-recording.recording {
+        .btn-recording.active {
             background: #28a745;
             animation: pulse 1s infinite;
         }
@@ -107,19 +114,17 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.7; }
         }
-        .slider-container {
-            margin-bottom: 10px;
-        }
+        .slider-container { margin-bottom: 8px; }
         .slider-label {
             display: flex;
             justify-content: space-between;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             color: #aaa;
-            margin-bottom: 4px;
+            margin-bottom: 3px;
         }
         input[type="range"] {
             width: 100%;
-            height: 6px;
+            height: 5px;
             border-radius: 3px;
             background: #252540;
             outline: none;
@@ -127,127 +132,108 @@
         }
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
             border-radius: 50%;
             background: #667eea;
             cursor: pointer;
         }
-        .color-schemes {
+        .color-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 6px;
+            gap: 5px;
         }
         .color-btn {
-            padding: 8px;
-            font-size: 0.75rem;
+            padding: 7px 5px;
+            font-size: 0.7rem;
             border: 1px solid #333;
-            border-radius: 6px;
+            border-radius: 5px;
             background: #252540;
             color: #fff;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s;
         }
         .color-btn:hover { background: #2d2d50; }
-        .color-btn.active {
-            border-color: #667eea;
-            background: #2d2d50;
-        }
+        .color-btn.active { border-color: #667eea; background: #2d2d50; }
         .preset-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 6px;
+            gap: 5px;
         }
         .preset-btn {
-            padding: 8px;
-            font-size: 0.7rem;
+            padding: 7px 5px;
+            font-size: 0.65rem;
             border: 1px solid #333;
-            border-radius: 6px;
+            border-radius: 5px;
             background: #252540;
             color: #ccc;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s;
         }
         .preset-btn:hover { background: #2d2d50; color: #fff; }
-        .info {
-            font-size: 0.7rem;
-            color: #888;
-            text-align: center;
-            margin-top: 8px;
-        }
-        .info span { color: #667eea; }
-        .status-bar {
-            display: flex;
-            gap: 16px;
-            font-size: 0.7rem;
-            color: #666;
-            margin-top: 8px;
-            justify-content: center;
-        }
-        .zoom-presets {
-            margin-top: 8px;
-        }
-        .video-settings {
-            margin-top: 10px;
-        }
         .video-progress {
             width: 100%;
-            height: 4px;
+            height: 3px;
             background: #252540;
             border-radius: 2px;
-            margin-top: 8px;
+            margin-top: 6px;
             overflow: hidden;
         }
         .video-progress-bar {
             height: 100%;
             background: linear-gradient(90deg, #667eea, #764ba2);
             width: 0%;
-            transition: width 0.1s linear;
+            transition: width 0.05s linear;
         }
         .progress-text {
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             color: #888;
-            margin-top: 4px;
+            margin-top: 3px;
         }
+        .status-bar {
+            font-size: 0.65rem;
+            color: #666;
+            margin-top: 6px;
+            text-align: center;
+        }
+        .status-bar span { color: #667eea; }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>Mandelbrot Visualizer</h1>
-        <p class="subtitle">Interactive Fractal Explorer with Video Mode</p>
+        <div class="perf-stats">
+            FPS: <span id="fps">0</span> | Render: <span id="renderTime">0</span>ms | Workers: <span id="workers">0</span>
+        </div>
     </div>
 
     <div class="main-container">
-        <div class="canvas-container">
-            <canvas id="canvas" width="700" height="600"></canvas>
+        <div class="canvas-wrapper">
+            <canvas id="canvas" width="800" height="650"></canvas>
         </div>
 
         <div class="sidebar">
             <div class="panel">
                 <div class="panel-title">Video Mode</div>
-                <button id="recordBtn" class="btn btn-recording">
-                    Start Video Recording
-                </button>
+                <button id="recordBtn" class="btn btn-recording">Start Recording</button>
                 <div class="slider-container">
                     <div class="slider-label">
-                        <span>Duration (seconds)</span>
+                        <span>Duration (sec)</span>
                         <span id="durationVal">30</span>
                     </div>
-                    <input type="range" id="duration" min="10" max="120" value="30">
+                    <input type="range" id="duration" min="10" max="180" value="30">
                 </div>
                 <div class="slider-container">
                     <div class="slider-label">
                         <span>Zoom Speed</span>
                         <span id="speedVal">1.0x</span>
                     </div>
-                    <input type="range" id="speed" min="1" max="10" value="1" step="0.5">
+                    <input type="range" id="speed" min="0.5" max="5" value="1" step="0.1">
                 </div>
-                <div class="video-settings">
-                    <div class="video-progress">
-                        <div class="video-progress-bar" id="videoProgress"></div>
-                    </div>
-                    <div class="progress-text" id="progressText">Ready to record</div>
+                <div class="video-progress">
+                    <div class="video-progress-bar" id="videoProgress"></div>
                 </div>
+                <div class="progress-text" id="progressText">Ready to record</div>
             </div>
 
             <div class="panel">
@@ -255,44 +241,37 @@
                 <button class="btn btn-secondary" onclick="zoomIn()">Zoom In</button>
                 <button class="btn btn-secondary" onclick="zoomOut()">Zoom Out</button>
                 <button class="btn btn-secondary" onclick="resetView()">Reset View</button>
-                <div class="zoom-presets">
-                    <div class="panel-title" style="margin-top: 10px;">Zoom Presets</div>
-                    <div class="preset-grid">
-                        <button class="preset-btn" onclick="goToPreset('spiral')">Spiral Valley</button>
-                        <button class="preset-btn" onclick="goToPreset('seahorse')">Seahorse Valley</button>
-                        <button class="preset-btn" onclick="goToPreset('elephant')">Elephant Valley</button>
-                        <button class="preset-btn" onclick="goToPreset('bug')">Buggy Sector</button>
-                        <button class="preset-btn" onclick="goToPreset('triple')">Triple Spiral</button>
-                        <button class="preset-btn" onclick="goToPreset('crystal')">Crystal Bay</button>
-                    </div>
+                <div class="panel-title" style="margin-top: 10px;">Zoom Presets</div>
+                <div class="preset-grid">
+                    <button class="preset-btn" onclick="goToPreset('spiral')">Spiral Valley</button>
+                    <button class="preset-btn" onclick="goToPreset('seahorse')">Seahorse</button>
+                    <button class="preset-btn" onclick="goToPreset('elephant')">Elephant</button>
+                    <button class="preset-btn" onclick="goToPreset('bug')">Buggy</button>
+                    <button class="preset-btn" onclick="goToPreset('triple')">Triple</button>
+                    <button class="preset-btn" onclick="goToPreset('crystal')">Crystal</button>
                 </div>
             </div>
 
             <div class="panel">
                 <div class="panel-title">Coloring</div>
-                <div class="color-schemes">
+                <div class="color-grid">
                     <button class="color-btn active" onclick="setColorScheme(0)">Electric</button>
                     <button class="color-btn" onclick="setColorScheme(1)">Ocean</button>
                     <button class="color-btn" onclick="setColorScheme(2)">Sunset</button>
-                    <button class="color-btn" onclick="setColorScheme(3)">Grayscale</button>
+                    <button class="color-btn" onclick="setColorScheme(3)">Gray</button>
                 </div>
-                <div class="slider-container" style="margin-top: 10px;">
+                <div class="slider-container" style="margin-top: 8px;">
                     <div class="slider-label">
-                        <span>Max Iterations</span>
-                        <span id="iterVal">100</span>
+                        <span>Iterations</span>
+                        <span id="iterVal">256</span>
                     </div>
-                    <input type="range" id="iterations" min="50" max="500" value="100" step="10">
+                    <input type="range" id="iterations" min="50" max="2000" value="256" step="10">
                 </div>
-            </div>
-
-            <div class="panel">
-                <div class="panel-title">Controls Help</div>
-                <p class="info">Click & drag to pan<br>Scroll to zoom at cursor<br><span>Video mode</span> auto-zooms to 1000x</p>
             </div>
         </div>
     </div>
 
-    <div class="info">
+    <div class="status-bar">
         <span id="coords">Center: -0.5 + 0i</span> | <span id="zoom">Zoom: 1x</span>
     </div>
 
@@ -302,17 +281,45 @@
         const width = canvas.width;
         const height = canvas.height;
 
+        const colorSchemes = [
+            {
+                name: 'Electric',
+                r: [0, 80, 130, 20, 200, 255, 255, 255],
+                g: [0, 20, 200, 255, 50, 100, 0, 255],
+                b: [0, 255, 255, 50, 0, 0, 0, 255]
+            },
+            {
+                name: 'Ocean',
+                r: [0, 0, 0, 0, 100, 102, 255],
+                g: [0, 26, 51, 102, 153, 204, 255],
+                b: [51, 77, 102, 153, 204, 255, 255]
+            },
+            {
+                name: 'Sunset',
+                r: [13, 45, 92, 143, 194, 242, 255, 255],
+                g: [2, 27, 61, 93, 125, 160, 214, 255],
+                b: [33, 78, 122, 166, 189, 208, 231, 245]
+            },
+                name: 'Grayscale',
+                r: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255],
+                g: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255],
+                b: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255]
+            }
+        ];
+
         let centerX = -0.5;
         let centerY = 0;
         let zoom = 1;
-        let maxIterations = 100;
+        let maxIterations = 256;
         let colorScheme = 0;
+
         let isRecording = false;
         let recordStartTime = 0;
         let recordDuration = 30;
         let recordSpeed = 1;
         let recordFrame = 0;
         let animationId = null;
+        let pendingRender = false;
 
         const presets = {
             spiral: { x: -0.761574, y: -0.0847596, zoom: 50000 },
@@ -323,74 +330,183 @@
             crystal: { x: -1.768, y: 0.002, zoom: 1000 }
         };
 
-        const colorSchemes = [
-            { name: 'Electric', colors: ['#000000', '#6600ff', '#00ccff', '#00ff66', '#ffff00', '#ff6600', '#ff0000', '#ffffff'] },
-            { name: 'Ocean', colors: ['#000033', '#001a4d', '#003366', '#006666', '#00cccc', '#66ffff', '#ffffff'] },
-            { name: 'Sunset', colors: ['#0d0221', '#2d1b4e', '#5c3d7a', '#8f5da6', '#c27dbd', '#f0a0d0', '#ffd6e7', '#fff0f5'] },
-            { name: 'Grayscale', colors: ['#000000', '#444444', '#888888', '#cccccc', '#ffffff'] }
-        ];
+        const TILE_SIZE = 32;
+        const NUM_WORKERS = navigator.hardwareConcurrency || 4;
+        let workers = [];
+        let workerPool = [];
+        let activeTiles = 0;
+        let completedTiles = 0;
+        let imageData = null;
+        let pendingImageData = null;
+        let renderStartTime = 0;
 
-        function getColor(iterations) {
-            if (iterations === maxIterations) return [5, 5, 15];
-            const scheme = colorSchemes[colorScheme].colors;
-            const t = (iterations % 100) / 100;
-            const idx = t * (scheme.length - 1);
-            const i = Math.floor(idx);
-            const f = idx - i;
-            const c1 = hexToRgb(scheme[i]);
-            const c2 = hexToRgb(scheme[Math.min(i + 1, scheme.length - 1)]);
-            return [
-                Math.round(c1.r + f * (c2.r - c1.r)),
-                Math.round(c1.g + f * (c2.g - c1.g)),
-                Math.round(c1.b + f * (c2.b - c1.b))
-            ];
-        }
+        function createWorkers() {
+            const code = `
+                const TILE_SIZE = 32;
+                const colorTables = {
+                    0: { r: [0, 80, 130, 20, 200, 255, 255, 255], g: [0, 20, 200, 255, 50, 100, 0, 255], b: [0, 255, 255, 50, 0, 0, 0, 255] },
+                    1: { r: [0, 0, 0, 0, 100, 102, 255], g: [0, 26, 51, 102, 153, 204, 255], b: [51, 77, 102, 153, 204, 255, 255] },
+                    2: { r: [13, 45, 92, 143, 194, 242, 255, 255], g: [2, 27, 61, 93, 125, 160, 214, 255], b: [33, 78, 122, 166, 189, 208, 231, 245] },
+                    3: { r: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255], g: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255], b: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255] }
+                };
 
-        function hexToRgb(hex) {
-            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-            return result ? {
-                r: parseInt(result[1], 16),
-                g: parseInt(result[2], 16),
-                b: parseInt(result[3], 16)
-            } : { r: 0, g: 0, b: 0 };
-        }
+                function mandelbrot(px, py, width, height, centerX, centerY, zoom, maxIter, schemeIdx) {
+                    const aspectRatio = width / height;
+                    const rangeY = 3 / zoom;
+                    const rangeX = rangeY * aspectRatio;
+                    const scheme = colorTables[schemeIdx];
 
-        function mandelbrot(x, y) {
-            let zr = 0, zi = 0;
-            let zr2 = 0, zi2 = 0;
-            let iterations = 0;
-            while (zr2 + zi2 <= 4 && iterations < maxIterations) {
-                zi = 2 * zr * zi + y;
-                zr = zr2 - zi2 + x;
-                zr2 = zr * zr;
-                zi2 = zi * zi;
-                iterations++;
+                    const results = new Uint8Array(TILE_SIZE * TILE_SIZE * 4);
+                    const len = scheme.r.length;
+                    const len1 = len - 1;
+
+                    for (let ty = 0; ty < TILE_SIZE && py + ty < height; ty++) {
+                        const y0 = centerY - rangeY / 2 + ((py + ty) / height) * rangeY;
+                        for (let tx = 0; tx < TILE_SIZE && px + tx < width; tx++) {
+                            const x0 = centerX - rangeX / 2 + ((px + tx) / width) * rangeX;
+
+                            let zr = 0, zi = 0, zr2 = 0, zi2 = 0;
+                            let iter = 0;
+
+                            while (zr2 + zi2 <= 4 && iter < maxIter) {
+                                zi = 2 * zr * zi + y0;
+                                zr = zr2 - zi2 + x0;
+                                zr2 = zr * zr;
+                                zi2 = zi * zi;
+                                iter++;
+                            }
+
+                            const idx = (ty * TILE_SIZE + tx) * 4;
+                            if (iter === maxIter) {
+                                results[idx] = 5;
+                                results[idx + 1] = 5;
+                                results[idx + 2] = 15;
+                            } else {
+                                const t = (iter % 100) / 100 * len1;
+                                const i = t | 0;
+                                const f = t - i;
+                                const r1 = scheme.r[i], r2 = scheme.r[Math.min(i + 1, len1)];
+                                const g1 = scheme.g[i], g2 = scheme.g[Math.min(i + 1, len1)];
+                                const b1 = scheme.b[i], b2 = scheme.b[Math.min(i + 1, len1)];
+                                results[idx] = (r1 + f * (r2 - r1) + 0.5) | 0;
+                                results[idx + 1] = (g1 + f * (g2 - g1) + 0.5) | 0;
+                                results[idx + 2] = (b1 + f * (b2 - b1) + 0.5) | 0;
+                            }
+                            results[idx + 3] = 255;
+                        }
+                    }
+                    return results;
+                }
+
+                self.onmessage = function(e) {
+                    const { type, data } = e.data;
+                    if (type === 'render') {
+                        const { x, y, w, h, centerX, centerY, zoom, maxIter, schemeIdx, tileId } = data;
+                        const result = mandelbrot(x, y, w, h, centerX, centerY, zoom, maxIter, schemeIdx);
+                        self.postMessage({ type: 'tile', tileId, x, y, data: result.buffer }, [result.buffer]);
+                    }
+                };
+            `;
+
+            const blob = new Blob([code], { type: 'application/javascript' });
+            const url = URL.createObjectURL(blob);
+
+            for (let i = 0; i < NUM_WORKERS; i++) {
+                const worker = new Worker(url);
+                worker.onmessage = onWorkerMessage;
+                workers.push(worker);
+                workerPool.push({ worker, busy: false });
             }
-            return iterations;
+            document.getElementById('workers').textContent = NUM_WORKERS;
         }
 
-        function render() {
-            const imageData = ctx.createImageData(width, height);
-            const aspectRatio = width / height;
-            const rangeY = 3 / zoom;
-            const rangeX = rangeY * aspectRatio;
+        function onWorkerMessage(e) {
+            const { type, tileId, x, y, data } = e.data;
+            if (type === 'tile') {
+                const buf = new Uint8Array(data);
+                const tileX = tileId % Math.ceil(width / TILE_SIZE);
+                const tileY = (tileId / Math.ceil(width / TILE_SIZE)) | 0;
+                const destX = tileX * TILE_SIZE;
+                const destY = tileY * TILE_SIZE;
 
-            for (let py = 0; py < height; py++) {
-                const y0 = centerY - rangeY / 2 + (py / height) * rangeY;
-                for (let px = 0; px < width; px++) {
-                    const x0 = centerX - rangeX / 2 + (px / width) * rangeX;
-                    const iterations = mandelbrot(x0, y0);
-                    const [r, g, b] = getColor(iterations);
-                    const idx = (py * width + px) * 4;
-                    imageData.data[idx] = r;
-                    imageData.data[idx + 1] = g;
-                    imageData.data[idx + 2] = b;
-                    imageData.data[idx + 3] = 255;
+                for (let ty = 0; ty < TILE_SIZE && destY + ty < height; ty++) {
+                    for (let tx = 0; tx < TILE_SIZE && destX + tx < width; tx++) {
+                        const srcIdx = (ty * TILE_SIZE + tx) * 4;
+                        const destIdx = ((destY + ty) * width + (destX + tx)) * 4;
+                        imageData.data[destIdx] = buf[srcIdx];
+                        imageData.data[destIdx + 1] = buf[srcIdx + 1];
+                        imageData.data[destIdx + 2] = buf[srcIdx + 2];
+                        imageData.data[destIdx + 3] = 255;
+                    }
+                }
+
+                activeTiles--;
+                if (activeTiles === 0 && completedTiles === Math.ceil(width / TILE_SIZE) * Math.ceil(height / TILE_SIZE)) {
+                    ctx.putImageData(imageData, 0, 0);
+                    const elapsed = performance.now() - renderStartTime;
+                    document.getElementById('renderTime').textContent = elapsed.toFixed(1);
                 }
             }
-            ctx.putImageData(imageData, 0, 0);
-            updateCoords();
         }
+
+        function renderAsync() {
+            if (pendingRender) return;
+            pendingRender = true;
+            requestAnimationFrame(doRender);
+        }
+
+        function doRender() {
+            pendingRender = false;
+            if (!imageData) imageData = ctx.createImageData(width, height);
+
+            renderStartTime = performance.now();
+            const tilesX = Math.ceil(width / TILE_SIZE);
+            const tilesY = Math.ceil(height / TILE_SIZE);
+            activeTiles = 0;
+            completedTiles = 0;
+
+            let idleWorker = workerPool.find(w => !w.busy);
+            for (let ty = 0; ty < tilesY; ty++) {
+                for (let tx = 0; tx < tilesX; tx++) {
+                    if (idleWorker) {
+                        idleWorker.busy = true;
+                        activeTiles++;
+                        idleWorker.worker.postMessage({
+                            type: 'render',
+                            data: {
+                                tileId: ty * tilesX + tx,
+                                x: tx * TILE_SIZE,
+                                y: ty * TILE_SIZE,
+                                w: width,
+                                h: height,
+                                centerX, centerY, zoom,
+                                maxIter: maxIterations,
+                                schemeIdx: colorScheme
+                            }
+                        });
+                        idleWorker = workerPool.find(w => !w.busy);
+                    }
+                }
+            }
+        }
+
+        let lastFpsTime = performance.now();
+        let frameCount = 0;
+
+        function tick() {
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFpsTime >= 1000) {
+                document.getElementById('fps').textContent = frameCount;
+                frameCount = 0;
+                lastFpsTime = now;
+            }
+            if (!isRecording) requestAnimationFrame(tick);
+        }
+
+        createWorkers();
+        renderAsync();
+        tick();
 
         function updateCoords() {
             document.getElementById('coords').textContent =
@@ -399,6 +515,7 @@
         }
 
         function formatZoom(z) {
+            if (z >= 1e12) return (z / 1e12).toFixed(1) + 'T';
             if (z >= 1e9) return (z / 1e9).toFixed(1) + 'B';
             if (z >= 1e6) return (z / 1e6).toFixed(1) + 'M';
             if (z >= 1e3) return (z / 1e3).toFixed(1) + 'K';
@@ -406,13 +523,17 @@
         }
 
         function zoomIn() {
+            stopRecording();
             zoom *= 1.5;
-            render();
+            updateCoords();
+            renderAsync();
         }
 
         function zoomOut() {
+            stopRecording();
             zoom = Math.max(1, zoom / 1.5);
-            render();
+            updateCoords();
+            renderAsync();
         }
 
         function resetView() {
@@ -420,30 +541,32 @@
             centerX = -0.5;
             centerY = 0;
             zoom = 1;
-            render();
+            updateCoords();
+            renderAsync();
         }
 
-        function setColorScheme(index) {
-            colorScheme = index;
+        function setColorScheme(idx) {
+            colorScheme = idx;
             document.querySelectorAll('.color-btn').forEach((btn, i) => {
-                btn.classList.toggle('active', i === index);
+                btn.classList.toggle('active', i === idx);
             });
-            render();
+            renderAsync();
         }
 
         function goToPreset(name) {
             stopRecording();
-            const preset = presets[name];
-            centerX = preset.x;
-            centerY = preset.y;
-            zoom = preset.zoom;
-            render();
+            const p = presets[name];
+            centerX = p.x;
+            centerY = p.y;
+            zoom = p.zoom;
+            updateCoords();
+            renderAsync();
         }
 
         document.getElementById('iterations').addEventListener('input', (e) => {
             maxIterations = parseInt(e.target.value);
             document.getElementById('iterVal').textContent = maxIterations;
-            render();
+            renderAsync();
         });
 
         document.getElementById('duration').addEventListener('input', (e) => {
@@ -468,25 +591,26 @@
             centerY = 0;
             zoom = 1;
             recordBtn.textContent = 'Stop Recording';
-            recordBtn.classList.add('recording');
-            recordBtn.classList.add('recording');
-            render();
-            recordingLoop();
+            recordBtn.classList.add('active');
+            updateCoords();
+            renderAsync();
+            recordTick();
         }
 
         function stopRecording() {
             isRecording = false;
-            recordBtn.textContent = 'Start Video Recording';
-            recordBtn.classList.remove('recording');
+            recordBtn.textContent = 'Start Recording';
+            recordBtn.classList.remove('active');
             if (animationId) {
                 cancelAnimationFrame(animationId);
                 animationId = null;
             }
             videoProgress.style.width = '0%';
             progressText.textContent = 'Ready to record';
+            tick();
         }
 
-        function recordingLoop() {
+        function recordTick() {
             if (!isRecording) return;
 
             const elapsed = (Date.now() - recordStartTime) / 1000;
@@ -494,24 +618,24 @@
             videoProgress.style.width = (progress * 100) + '%';
 
             const remaining = Math.ceil(recordDuration - elapsed);
-            progressText.textContent = `${formatTime(elapsed)} / ${formatTime(recordDuration)} | Frame ${recordFrame}`;
+            progressText.textContent = `${formatTime(elapsed)} / ${formatTime(recordDuration)} | Frame ${recordFrame++}`;
 
-            const targetZoom = 1000000000000;
+            const targetZoom = 1e12;
             const zoomProgress = progress * progress * progress;
-            zoom = Math.pow(targetZoom / 1, zoomProgress) * 1;
+            zoom = Math.pow(targetZoom, zoomProgress);
 
-            recordFrame++;
-            render();
+            updateCoords();
+            renderAsync();
 
             if (elapsed >= recordDuration) {
-                progressText.textContent = `Recording complete! ${recordFrame} frames captured.`;
+                progressText.textContent = `Complete! ${recordFrame} frames captured.`;
                 isRecording = false;
-                recordBtn.textContent = 'Start Video Recording';
-                recordBtn.classList.remove('recording');
+                recordBtn.textContent = 'Start Recording';
+                recordBtn.classList.remove('active');
                 return;
             }
 
-            animationId = requestAnimationFrame(recordingLoop);
+            animationId = requestAnimationFrame(recordTick);
         }
 
         function formatTime(seconds) {
@@ -521,11 +645,8 @@
         }
 
         recordBtn.addEventListener('click', () => {
-            if (isRecording) {
-                stopRecording();
-            } else {
-                startRecording();
-            }
+            if (isRecording) stopRecording();
+            else startRecording();
         });
 
         let isDragging = false;
@@ -549,7 +670,8 @@
             centerY -= (dy / height) * rangeY;
             lastX = e.clientX;
             lastY = e.clientY;
-            render();
+            updateCoords();
+            renderAsync();
         });
 
         canvas.addEventListener('mouseup', () => { isDragging = false; });
@@ -558,6 +680,7 @@
         canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
             if (isRecording) return;
+
             const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
             const rect = canvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
@@ -567,15 +690,17 @@
             const rangeX = rangeY * aspectRatio;
             const x0 = centerX - rangeX / 2 + (mouseX / width) * rangeX;
             const y0 = centerY - rangeY / 2 + (mouseY / height) * rangeY;
+
             zoom *= zoomFactor;
+
             const newRangeY = 3 / zoom;
             const newRangeX = newRangeY * aspectRatio;
             centerX = x0 + (mouseX / width) * newRangeX - newRangeX / 2;
             centerY = y0 + (mouseY / height) * newRangeY - newRangeY / 2;
-            render();
-        });
 
-        render();
+            updateCoords();
+            renderAsync();
+        });
     </script>
 </body>
 </html>
