@@ -197,6 +197,16 @@
             text-align: center;
         }
         .status-bar span { color: #667eea; }
+        .update-status {
+            font-size: 0.65rem;
+            color: #888;
+            background: #1a1a2e;
+            padding: 4px 10px;
+            border-radius: 12px;
+            margin-left: auto;
+        }
+        .update-status.error { color: #dc3545; }
+        .update-status.success { color: #28a745; }
     </style>
 </head>
 <body>
@@ -205,6 +215,7 @@
         <div class="perf-stats">
             FPS: <span id="fps">0</span> | Render: <span id="renderTime">0</span>ms
         </div>
+        <div class="update-status" id="updateStatus">Checking updates...</div>
     </div>
 
     <div class="main-container">
@@ -686,6 +697,39 @@
         updateCoords();
         render();
         updateFPS();
+
+        // Listen for update status from main process
+        if (window.electronAPI) {
+            window.electronAPI.onUpdateStatus(function(data) {
+                console.log('Update status:', data);
+                var statusEl = document.getElementById('updateStatus');
+                if (typeof data === 'string') {
+                    statusEl.textContent = data;
+                    if (data.indexOf('error') !== -1 || data.indexOf('Error') !== -1) {
+                        statusEl.className = 'update-status error';
+                    } else if (data.indexOf('ready') !== -1 || data.indexOf('available') !== -1 || data.indexOf('downloading') !== -1) {
+                        statusEl.className = 'update-status success';
+                    } else {
+                        statusEl.className = 'update-status';
+                    }
+                } else if (data && data.status) {
+                    statusEl.textContent = data.status;
+                    if (data.status === 'error') {
+                        statusEl.className = 'update-status error';
+                    } else if (data.status === 'available' || data.status === 'ready') {
+                        statusEl.className = 'update-status success';
+                    } else {
+                        statusEl.className = 'update-status';
+                    }
+                }
+            });
+
+            window.electronAPI.getAppVersion().then(function(version) {
+                console.log('App version:', version);
+            });
+        } else {
+            document.getElementById('updateStatus').textContent = 'Update system unavailable';
+        }
     </script>
 </body>
 </html>

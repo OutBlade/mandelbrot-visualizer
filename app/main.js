@@ -30,12 +30,17 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
+  autoUpdater.logger = console;
+  autoUpdater.logger.transports.file.level = 'info';
+
   autoUpdater.on('checking-for-update', () => {
-    mainWindow?.webContents.send('update-status', { status: 'checking' });
+    console.log('[AutoUpdater] Checking for updates...');
+    sendStatusToWindow('Checking for updates...');
   });
 
   autoUpdater.on('update-available', (info) => {
-    mainWindow?.webContents.send('update-status', { status: 'available', version: info.version });
+    console.log('[AutoUpdater] Update available:', info.version);
+    sendStatusToWindow(`Update available: v${info.version}`);
     dialog.showMessageBox(mainWindow, {
       type: 'info',
       title: 'Update Available',
@@ -44,15 +49,19 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-not-available', () => {
-    mainWindow?.webContents.send('update-status', { status: 'up-to-date' });
+    console.log('[AutoUpdater] No updates available');
+    sendStatusToWindow('Up to date');
   });
 
   autoUpdater.on('download-progress', (progress) => {
-    mainWindow?.webContents.send('update-status', { status: 'downloading', progress: progress.percent });
+    const percent = progress.percent.toFixed(1);
+    console.log('[AutoUpdater] Download progress:', percent + '%');
+    sendStatusToWindow(`Downloading: ${percent}%`);
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    mainWindow?.webContents.send('update-status', { status: 'ready', version: info.version });
+    console.log('[AutoUpdater] Update downloaded:', info.version);
+    sendStatusToWindow(`Update ready: v${info.version}`);
     dialog.showMessageBox(mainWindow, {
       type: 'info',
       title: 'Update Ready',
@@ -66,12 +75,29 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('error', (error) => {
-    mainWindow?.webContents.send('update-status', { status: 'error', message: error.message });
+    console.error('[AutoUpdater] Error:', error.message);
+    sendStatusToWindow(`Update error: ${error.message}`);
   });
 
-  autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-    console.error('Auto-update check failed:', err);
-  });
+  console.log('[AutoUpdater] Starting update check...');
+  console.log('[AutoUpdater] App version:', app.getVersion());
+  console.log('[AutoUpdater] Feed URL provider configured');
+
+  try {
+    autoUpdater.checkForUpdatesAndNotify().then(result => {
+      console.log('[AutoUpdater] Check result:', result);
+    }).catch(err => {
+      console.error('[AutoUpdater] Check failed:', err.message);
+    });
+  } catch (err) {
+    console.error('[AutoUpdater] Exception:', err.message);
+  }
+}
+
+function sendStatusToWindow(text) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-status', text);
+  }
 }
 
 ipcMain.handle('get-app-version', () => {
@@ -88,6 +114,7 @@ ipcMain.handle('check-for-updates', async () => {
 });
 
 app.whenReady().then(() => {
+  console.log('[App] Ready, creating window...');
   createWindow();
   setupAutoUpdater();
 
