@@ -7,7 +7,6 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win --x64 --publish never"
   },
@@ -33,19 +32,19 @@
       "src/**/*",
       "package.json"
     ],
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "OutBlade",
-        "repo": "mandelbrot-visualizer",
-        "releaseType": "release"
-      }
-    ],
+    "publish": {
+      "provider": "github",
+      "owner": "OutBlade",
+      "repo": "mandelbrot-visualizer"
+    },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
-      "artifactName": "MandelbrotVisualizerSetup-${version}.exe",
-      "publisherName": "OutBlade",
-      "requestedExecutionLevel": "asInvoker"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "MandelbrotVisualizerSetup-${version}.exe"
     },
     "nsis": {
       "oneClick": false,
@@ -54,14 +53,6 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Mandelbrot Visualizer"
-    },
-    "mac": {
-      "target": "dmg",
-      "category": "public.app-category.graphics"
-    },
-    "linux": {
-      "target": ["AppImage"],
-      "category": "Graphics"
     }
   }
 }

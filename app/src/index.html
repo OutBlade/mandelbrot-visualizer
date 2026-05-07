@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'blob:'; style-src 'self' 'unsafe-inline';">
     <title>Mandelbrot Visualizer</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -16,7 +15,6 @@
             flex-direction: column;
             align-items: center;
             padding: 12px;
-            overflow: hidden;
         }
         .header {
             text-align: center;
@@ -30,221 +28,66 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            background-clip: text;
         }
-        .perf-stats {
-            font-size: 0.7rem;
-            color: #888;
-            background: #1a1a2e;
-            padding: 4px 10px;
-            border-radius: 12px;
-        }
-        .perf-stats span { color: #667eea; }
-        .main-container {
-            display: flex;
-            gap: 14px;
-            flex: 1;
-            max-width: 1600px;
-            width: 100%;
-            min-height: 0;
-        }
-        .canvas-wrapper {
-            position: relative;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 10px 40px rgba(102, 126, 234, 0.25);
-            flex-shrink: 0;
-        }
-        canvas {
-            display: block;
-            cursor: crosshair;
-            background: #000;
-        }
-        .sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            min-width: 210px;
-            overflow-y: auto;
-        }
-        .panel {
-            background: #1a1a2e;
-            border-radius: 10px;
-            padding: 12px;
-        }
-        .panel-title {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: #667eea;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .btn {
-            width: 100%;
-            padding: 9px 12px;
-            font-size: 0.8rem;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            font-weight: 500;
-            margin-bottom: 5px;
-        }
+        .status { font-size: 0.7rem; color: #888; }
+        .main { display: flex; gap: 14px; flex: 1; max-width: 1400px; }
+        .canvas-wrap { border-radius: 10px; overflow: hidden; box-shadow: 0 10px 40px rgba(102,126,234,0.25); }
+        canvas { display: block; background: #000; cursor: crosshair; }
+        .sidebar { display: flex; flex-direction: column; gap: 10px; min-width: 200px; }
+        .panel { background: #1a1a2e; border-radius: 10px; padding: 12px; }
+        .panel-title { font-size: 0.75rem; font-weight: 600; color: #667eea; margin-bottom: 8px; text-transform: uppercase; }
+        .btn { width: 100%; padding: 9px 12px; font-size: 0.8rem; border: none; border-radius: 6px; cursor: pointer; transition: all 0.15s; font-weight: 500; margin-bottom: 5px; }
         .btn:hover { transform: translateY(-1px); }
-        .btn:active { transform: translateY(0); }
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #fff;
-        }
-        .btn-secondary {
-            background: #252540;
-            color: #fff;
-        }
+        .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; }
+        .btn-secondary { background: #252540; color: #fff; }
         .btn-secondary:hover { background: #2d2d50; }
-        .btn-recording {
-            background: #dc3545;
-            color: #fff;
-        }
-        .btn-recording.active {
-            background: #28a745;
-            animation: pulse 1s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-        .slider-container { margin-bottom: 8px; }
-        .slider-label {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.7rem;
-            color: #aaa;
-            margin-bottom: 3px;
-        }
-        input[type="range"] {
-            width: 100%;
-            height: 5px;
-            border-radius: 3px;
-            background: #252540;
-            outline: none;
-            -webkit-appearance: none;
-        }
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: #667eea;
-            cursor: pointer;
-        }
-        .color-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 5px;
-        }
-        .color-btn {
-            padding: 7px 5px;
-            font-size: 0.7rem;
-            border: 1px solid #333;
-            border-radius: 5px;
-            background: #252540;
-            color: #fff;
-            cursor: pointer;
-            transition: all 0.15s;
-        }
+        .btn-recording { background: #dc3545; color: #fff; }
+        .btn-recording.active { background: #28a745; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+        .slider { margin-bottom: 8px; }
+        .slider-label { display: flex; justify-content: space-between; font-size: 0.7rem; color: #aaa; margin-bottom: 3px; }
+        input[type=range] { width: 100%; height: 5px; border-radius: 3px; background: #252540; outline: none; -webkit-appearance: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #667eea; cursor: pointer; }
+        .color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .color-btn { padding: 7px 5px; font-size: 0.7rem; border: 1px solid #333; border-radius: 5px; background: #252540; color: #fff; cursor: pointer; transition: all 0.15s; }
         .color-btn:hover { background: #2d2d50; }
         .color-btn.active { border-color: #667eea; background: #2d2d50; }
-        .preset-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 5px;
-        }
-        .preset-btn {
-            padding: 7px 5px;
-            font-size: 0.65rem;
-            border: 1px solid #333;
-            border-radius: 5px;
-            background: #252540;
-            color: #ccc;
-            cursor: pointer;
-            transition: all 0.15s;
-        }
+        .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .preset-btn { padding: 7px 5px; font-size: 0.65rem; border: 1px solid #333; border-radius: 5px; background: #252540; color: #ccc; cursor: pointer; }
         .preset-btn:hover { background: #2d2d50; color: #fff; }
-        .video-progress {
-            width: 100%;
-            height: 3px;
-            background: #252540;
-            border-radius: 2px;
-            margin-top: 6px;
-            overflow: hidden;
-        }
-        .video-progress-bar {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            width: 0%;
-            transition: width 0.05s linear;
-        }
-        .progress-text {
-            font-size: 0.65rem;
-            color: #888;
-            margin-top: 3px;
-        }
-        .status-bar {
-            font-size: 0.65rem;
-            color: #666;
-            margin-top: 6px;
-            text-align: center;
-        }
-        .status-bar span { color: #667eea; }
-        .update-status {
-            font-size: 0.65rem;
-            color: #888;
-            background: #1a1a2e;
-            padding: 4px 10px;
-            border-radius: 12px;
-            margin-left: auto;
-        }
-        .update-status.error { color: #dc3545; }
-        .update-status.success { color: #28a745; }
+        .progress { width: 100%; height: 3px; background: #252540; border-radius: 2px; margin-top: 6px; overflow: hidden; }
+        .progress-bar { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); width: 0%; transition: width 0.05s; }
+        .progress-text { font-size: 0.65rem; color: #888; margin-top: 3px; }
+        .info { font-size: 0.65rem; color: #666; margin-top: 6px; text-align: center; }
+        .info span { color: #667eea; }
+        .update-status { font-size: 0.65rem; padding: 4px 10px; background: #1a1a2e; border-radius: 12px; }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>Mandelbrot Visualizer</h1>
-        <div class="perf-stats">
-            FPS: <span id="fps">0</span> | Render: <span id="renderTime">0</span>ms
-        </div>
-        <div class="update-status" id="updateStatus">Checking updates...</div>
+        <span class="update-status" id="updateStatus">Loading...</span>
     </div>
 
-    <div class="main-container">
-        <div class="canvas-wrapper">
-            <canvas id="canvas" width="800" height="650"></canvas>
+    <div class="main">
+        <div class="canvas-wrap">
+            <canvas id="canvas" width="700" height="600"></canvas>
         </div>
 
         <div class="sidebar">
             <div class="panel">
                 <div class="panel-title">Video Mode</div>
-                <button id="recordBtn" class="btn btn-recording">Start Recording</button>
-                <div class="slider-container">
-                    <div class="slider-label">
-                        <span>Duration (sec)</span>
-                        <span id="durationVal">30</span>
-                    </div>
+                <button class="btn btn-recording" id="recordBtn">Start Recording</button>
+                <div class="slider">
+                    <div class="slider-label"><span>Duration (sec)</span><span id="durVal">30</span></div>
                     <input type="range" id="duration" min="10" max="180" value="30">
                 </div>
-                <div class="slider-container">
-                    <div class="slider-label">
-                        <span>Zoom Speed</span>
-                        <span id="speedVal">1.0x</span>
-                    </div>
+                <div class="slider">
+                    <div class="slider-label"><span>Speed</span><span id="speedVal">1.0x</span></div>
                     <input type="range" id="speed" min="0.5" max="5" value="1" step="0.1">
                 </div>
-                <div class="video-progress">
-                    <div class="video-progress-bar" id="videoProgress"></div>
-                </div>
-                <div class="progress-text" id="progressText">Ready to record</div>
+                <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+                <div class="progress-text" id="progressText">Ready</div>
             </div>
 
             <div class="panel">
@@ -252,483 +95,196 @@
                 <button class="btn btn-secondary" id="zoomInBtn">Zoom In</button>
                 <button class="btn btn-secondary" id="zoomOutBtn">Zoom Out</button>
                 <button class="btn btn-secondary" id="resetBtn">Reset View</button>
-                <div class="panel-title" style="margin-top: 10px;">Zoom Presets</div>
+                <div class="panel-title" style="margin-top:10px">Presets</div>
                 <div class="preset-grid">
-                    <button class="preset-btn" data-preset="spiral">Spiral</button>
-                    <button class="preset-btn" data-preset="seahorse">Seahorse</button>
-                    <button class="preset-btn" data-preset="elephant">Elephant</button>
-                    <button class="preset-btn" data-preset="bug">Buggy</button>
-                    <button class="preset-btn" data-preset="triple">Triple</button>
-                    <button class="preset-btn" data-preset="crystal">Crystal</button>
+                    <button class="preset-btn" data-p="spiral">Spiral</button>
+                    <button class="preset-btn" data-p="seahorse">Seahorse</button>
+                    <button class="preset-btn" data-p="elephant">Elephant</button>
+                    <button class="preset-btn" data-p="bug">Buggy</button>
+                    <button class="preset-btn" data-p="triple">Triple</button>
+                    <button class="preset-btn" data-p="crystal">Crystal</button>
                 </div>
             </div>
 
             <div class="panel">
                 <div class="panel-title">Coloring</div>
                 <div class="color-grid">
-                    <button class="color-btn active" data-color="0">Electric</button>
-                    <button class="color-btn" data-color="1">Ocean</button>
-                    <button class="color-btn" data-color="2">Sunset</button>
-                    <button class="color-btn" data-color="3">Gray</button>
+                    <button class="color-btn active" data-c="0">Electric</button>
+                    <button class="color-btn" data-c="1">Ocean</button>
+                    <button class="color-btn" data-c="2">Sunset</button>
+                    <button class="color-btn" data-c="3">Gray</button>
                 </div>
-                <div class="slider-container" style="margin-top: 8px;">
-                    <div class="slider-label">
-                        <span>Iterations</span>
-                        <span id="iterVal">256</span>
-                    </div>
+                <div class="slider" style="margin-top:8px">
+                    <div class="slider-label"><span>Iterations</span><span id="iterVal">256</span></div>
                     <input type="range" id="iterations" min="50" max="2000" value="256" step="10">
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="status-bar">
-        <span id="coords">Center: -0.5 + 0i</span> | <span id="zoom">Zoom: 1x</span>
-    </div>
+    <div class="info"><span id="coords">-0.5 + 0i</span> | <span id="zoom">1x</span></div>
 
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
+        const W = canvas.width;
+        const H = canvas.height;
 
-        const colorTables = [
-            { r: [0, 80, 130, 20, 200, 255, 255, 255], g: [0, 20, 200, 255, 50, 100, 0, 255], b: [0, 255, 255, 50, 0, 0, 0, 255] },
-            { r: [0, 0, 0, 0, 100, 102, 255], g: [0, 26, 51, 102, 153, 204, 255], b: [51, 77, 102, 153, 204, 255, 255] },
-            { r: [13, 45, 92, 143, 194, 242, 255, 255], g: [2, 27, 61, 93, 125, 160, 214, 255], b: [33, 78, 122, 166, 189, 208, 231, 245] },
-            { r: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255], g: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255], b: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255] }
+        const palettes = [
+            [[0,80,130,20,200,255,255,255],[0,20,200,255,50,100,0,255],[0,255,255,50,0,0,0,255]],
+            [[0,0,0,0,100,102,255],[0,26,51,102,153,204,255],[51,77,102,153,204,255,255]],
+            [[13,45,92,143,194,242,255,255],[2,27,61,93,125,160,214,255],[33,78,122,166,189,208,231,245]],
+            [[0,26,51,77,102,128,153,179,204,230,255],[0,26,51,77,102,128,153,179,204,230,255],[0,26,51,77,102,128,153,179,204,230,255]]
         ];
 
-        let centerX = -0.5;
-        let centerY = 0;
-        let zoom = 1;
-        let maxIterations = 256;
-        let colorScheme = 0;
-        let isRecording = false;
-        let recordStartTime = 0;
-        let recordDuration = 30;
-        let recordSpeed = 1;
-        let recordFrame = 0;
-        let animationId = null;
-        let pendingRender = false;
-        let imageData = null;
-
         const presets = {
-            spiral: { x: -0.761574, y: -0.0847596, zoom: 50000 },
-            seahorse: { x: -0.745, y: 0.113, zoom: 10000 },
-            elephant: { x: 0.265, y: 0.001, zoom: 8000 },
-            bug: { x: -1.15, y: 0.28, zoom: 5000 },
-            triple: { x: -0.088, y: 0.654, zoom: 10000 },
-            crystal: { x: -1.768, y: 0.002, zoom: 1000 }
+            spiral: [-0.761574, -0.0847596, 50000],
+            seahorse: [-0.745, 0.113, 10000],
+            elephant: [0.265, 0.001, 8000],
+            bug: [-1.15, 0.28, 5000],
+            triple: [-0.088, 0.654, 10000],
+            crystal: [-1.768, 0.002, 1000]
         };
 
-        const TILE_SIZE = 32;
-        let workers = [];
-        let activeTiles = 0;
-        let renderStartTime = 0;
+        let cx = -0.5, cy = 0, zoom = 1, maxIter = 256, scheme = 0;
+        let isRec = false, recStart = 0, recDur = 30, recSpeed = 1, frame = 0;
+        let imageData = ctx.createImageData(W, H);
 
-        function createWorkers() {
-            const numWorkers = navigator.hardwareConcurrency || 4;
-            const code = `
-                const TILE_SIZE = 32;
-                const colorTables = [
-                    { r: [0, 80, 130, 20, 200, 255, 255, 255], g: [0, 20, 200, 255, 50, 100, 0, 255], b: [0, 255, 255, 50, 0, 0, 0, 255] },
-                    { r: [0, 0, 0, 0, 100, 102, 255], g: [0, 26, 51, 102, 153, 204, 255], b: [51, 77, 102, 153, 204, 255, 255] },
-                    { r: [13, 45, 92, 143, 194, 242, 255, 255], g: [2, 27, 61, 93, 125, 160, 214, 255], b: [33, 78, 122, 166, 189, 208, 231, 245] },
-                    { r: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255], g: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255], b: [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255] }
-                ];
-                self.onmessage = function(e) {
-                    var data = e.data;
-                    if (data.type === 'render') {
-                        var tileId = data.tileId;
-                        var px = data.x;
-                        var py = data.y;
-                        var w = data.width;
-                        var h = data.height;
-                        var cx = data.centerX;
-                        var cy = data.centerY;
-                        var z = data.zoom;
-                        var maxIter = data.maxIter;
-                        var schemeIdx = data.schemeIdx;
-                        var aspectRatio = w / h;
-                        var rangeY = 3 / z;
-                        var rangeX = rangeY * aspectRatio;
-                        var scheme = colorTables[schemeIdx];
-                        var results = new Uint8Array(TILE_SIZE * TILE_SIZE * 4);
-                        var len = scheme.r.length;
-                        var len1 = len - 1;
-                        for (var ty = 0; ty < TILE_SIZE && py + ty < h; ty++) {
-                            var y0 = cy - rangeY / 2 + ((py + ty) / h) * rangeY;
-                            for (var tx = 0; tx < TILE_SIZE && px + tx < w; tx++) {
-                                var x0 = cx - rangeX / 2 + ((px + tx) / w) * rangeX;
-                                var zr = 0, zi = 0, zr2 = 0, zi2 = 0;
-                                var iter = 0;
-                                while (zr2 + zi2 <= 4 && iter < maxIter) {
-                                    zi = 2 * zr * zi + y0;
-                                    zr = zr2 - zi2 + x0;
-                                    zr2 = zr * zr;
-                                    zi2 = zi * zi;
-                                    iter++;
-                                }
-                                var idx = (ty * TILE_SIZE + tx) * 4;
-                                if (iter === maxIter) {
-                                    results[idx] = 5;
-                                    results[idx + 1] = 5;
-                                    results[idx + 2] = 15;
-                                } else {
-                                    var t = (iter % 100) / 100 * len1;
-                                    var i = t | 0;
-                                    var f = t - i;
-                                    var r1 = scheme.r[i], r2 = scheme.r[Math.min(i + 1, len1)];
-                                    var g1 = scheme.g[i], g2 = scheme.g[Math.min(i + 1, len1)];
-                                    var b1 = scheme.b[i], b2 = scheme.b[Math.min(i + 1, len1)];
-                                    results[idx] = (r1 + f * (r2 - r1) + 0.5) | 0;
-                                    results[idx + 1] = (g1 + f * (g2 - g1) + 0.5) | 0;
-                                    results[idx + 2] = (b1 + f * (b2 - b1) + 0.5) | 0;
-                                }
-                                results[idx + 3] = 255;
-                            }
-                        }
-                        self.postMessage({ type: 'tile', tileId: tileId, x: px, y: py, data: results.buffer }, [results.buffer]);
-                    }
-                };
-            `;
-
-            const blob = new Blob([code], { type: 'application/javascript' });
-            const url = URL.createObjectURL(blob);
-
-            for (let i = 0; i < numWorkers; i++) {
-                const worker = new Worker(url);
-                worker.onmessage = onWorkerMessage;
-                workers.push(worker);
-            }
-        }
-
-        function onWorkerMessage(e) {
-            if (e.data.type === 'tile') {
-                var buf = new Uint8Array(e.data.data);
-                var tileX = e.data.x / TILE_SIZE;
-                var tileY = e.data.y / TILE_SIZE;
-                var destX = e.data.x;
-                var destY = e.data.y;
-
-                for (var ty = 0; ty < TILE_SIZE && destY + ty < height; ty++) {
-                    for (var tx = 0; tx < TILE_SIZE && destX + tx < width; tx++) {
-                        var srcIdx = (ty * TILE_SIZE + tx) * 4;
-                        var destIdx = ((destY + ty) * width + (destX + tx)) * 4;
-                        imageData.data[destIdx] = buf[srcIdx];
-                        imageData.data[destIdx + 1] = buf[srcIdx + 1];
-                        imageData.data[destIdx + 2] = buf[srcIdx + 2];
-                        imageData.data[destIdx + 3] = 255;
-                    }
-                }
-
-                activeTiles--;
-                if (activeTiles === 0) {
-                    ctx.putImageData(imageData, 0, 0);
-                    var elapsed = performance.now() - renderStartTime;
-                    document.getElementById('renderTime').textContent = elapsed.toFixed(1);
-                }
-            }
+        function getColor(iter) {
+            if (iter === maxIter) return [5, 5, 15];
+            const p = palettes[scheme];
+            const t = (iter % 100) / 100 * (p[0].length - 1);
+            const i = t | 0, f = t - i;
+            const r = p[0], g = p[1], b = p[2];
+            return [
+                (r[i] + f * (r[i+1] - r[i]) + 0.5) | 0,
+                (g[i] + f * (g[i+1] - g[i]) + 0.5) | 0,
+                (b[i] + f * (b[i+1] - b[i]) + 0.5) | 0
+            ];
         }
 
         function render() {
-            if (pendingRender) return;
-            pendingRender = true;
-            requestAnimationFrame(doRender);
-        }
+            const ar = W / H, ry = 3 / zoom, rx = ry * ar;
+            const x0 = cx - rx / 2, y0 = cy - ry / 2;
+            const dx = rx / W, dy = ry / H;
+            const d = imageData.data;
 
-        function doRender() {
-            pendingRender = false;
-            if (!imageData) imageData = ctx.createImageData(width, height);
-
-            renderStartTime = performance.now();
-            var tilesX = Math.ceil(width / TILE_SIZE);
-            var tilesY = Math.ceil(height / TILE_SIZE);
-            activeTiles = tilesX * tilesY;
-            var workerIdx = 0;
-
-            for (var ty = 0; ty < tilesY; ty++) {
-                for (var tx = 0; tx < tilesX; tx++) {
-                    var px = tx * TILE_SIZE;
-                    var py = ty * TILE_SIZE;
-                    workers[workerIdx % workers.length].postMessage({
-                        type: 'render',
-                        tileId: ty * tilesX + tx,
-                        x: px,
-                        y: py,
-                        width: width,
-                        height: height,
-                        centerX: centerX,
-                        centerY: centerY,
-                        zoom: zoom,
-                        maxIter: maxIterations,
-                        schemeIdx: colorScheme
-                    });
-                    workerIdx++;
+            for (let py = 0; py < H; py++) {
+                const y = y0 + py * dy;
+                for (let px = 0; px < W; px++) {
+                    const x = x0 + px * dx;
+                    let zr = 0, zi = 0, zr2 = 0, zi2 = 0, iter = 0;
+                    while (zr2 + zi2 <= 4 && iter < maxIter) {
+                        zi = 2 * zr * zi + y;
+                        zr = zr2 - zi2 + x;
+                        zr2 = zr * zr; zi2 = zi * zi;
+                        iter++;
+                    }
+                    const [r, g, b] = getColor(iter);
+                    const idx = (py * W + px) * 4;
+                    d[idx] = r; d[idx+1] = g; d[idx+2] = b; d[idx+3] = 255;
                 }
             }
-        }
-
-        var frameCount = 0;
-        var lastFpsTime = performance.now();
-        function updateFPS() {
-            if (!isRecording) {
-                frameCount++;
-                var now = performance.now();
-                if (now - lastFpsTime >= 1000) {
-                    document.getElementById('fps').textContent = frameCount;
-                    frameCount = 0;
-                    lastFpsTime = now;
-                }
-            }
-            requestAnimationFrame(updateFPS);
+            ctx.putImageData(imageData, 0, 0);
         }
 
         function updateCoords() {
-            document.getElementById('coords').textContent =
-                'Center: ' + centerX.toFixed(6) + ' ' + (centerY >= 0 ? '+' : '') + centerY.toFixed(6) + 'i';
-            document.getElementById('zoom').textContent = 'Zoom: ' + formatZoom(zoom);
+            document.getElementById('coords').textContent = cx.toFixed(6) + (cy >= 0 ? '+' : '') + cy.toFixed(6) + 'i';
+            const z = zoom;
+            let zStr;
+            if (z >= 1e12) zStr = (z/1e12).toFixed(1) + 'T';
+            else if (z >= 1e9) zStr = (z/1e9).toFixed(1) + 'B';
+            else if (z >= 1e6) zStr = (z/1e6).toFixed(1) + 'M';
+            else if (z >= 1e3) zStr = (z/1e3).toFixed(1) + 'K';
+            else zStr = z.toFixed(1) + 'x';
+            document.getElementById('zoom').textContent = zStr;
         }
 
-        function formatZoom(z) {
-            if (z >= 1e12) return (z / 1e12).toFixed(1) + 'T';
-            if (z >= 1e9) return (z / 1e9).toFixed(1) + 'B';
-            if (z >= 1e6) return (z / 1e6).toFixed(1) + 'M';
-            if (z >= 1e3) return (z / 1e3).toFixed(1) + 'K';
-            return z.toFixed(1) + 'x';
-        }
+        function zoomIn() { stopRec(); zoom *= 1.5; updateCoords(); render(); }
+        function zoomOut() { stopRec(); zoom = Math.max(1, zoom / 1.5); updateCoords(); render(); }
+        function reset() { stopRec(); cx = -0.5; cy = 0; zoom = 1; updateCoords(); render(); }
+        function goPreset(n) { stopRec(); const p = presets[n]; if (p) { cx = p[0]; cy = p[1]; zoom = p[2]; updateCoords(); render(); } }
+        function setScheme(i) { scheme = i; document.querySelectorAll('.color-btn').forEach((b, j) => b.classList.toggle('active', j === i)); render(); }
 
-        function zoomIn() {
-            stopRecording();
-            zoom *= 1.5;
-            updateCoords();
-            render();
-        }
-
-        function zoomOut() {
-            stopRecording();
-            zoom = Math.max(1, zoom / 1.5);
-            updateCoords();
-            render();
-        }
-
-        function resetView() {
-            stopRecording();
-            centerX = -0.5;
-            centerY = 0;
-            zoom = 1;
-            updateCoords();
-            render();
-        }
-
-        function setColorScheme(idx) {
-            colorScheme = idx;
-            document.querySelectorAll('.color-btn').forEach(function(btn) {
-                btn.classList.toggle('active', parseInt(btn.dataset.color) === idx);
-            });
-            render();
-        }
-
-        function goToPreset(name) {
-            stopRecording();
-            var p = presets[name];
-            if (p) {
-                centerX = p.x;
-                centerY = p.y;
-                zoom = p.zoom;
-                updateCoords();
-                render();
-            }
-        }
-
-        function startRecording() {
-            isRecording = true;
-            recordStartTime = Date.now();
-            recordFrame = 0;
-            centerX = -0.5;
-            centerY = 0;
-            zoom = 1;
+        function startRec() {
+            isRec = true; recStart = Date.now(); frame = 0; cx = -0.5; cy = 0; zoom = 1;
             document.getElementById('recordBtn').textContent = 'Stop Recording';
             document.getElementById('recordBtn').classList.add('active');
-            updateCoords();
-            render();
-            recordTick();
+            updateCoords(); render(); recLoop();
         }
 
-        function stopRecording() {
-            isRecording = false;
+        function stopRec() {
+            isRec = false;
             document.getElementById('recordBtn').textContent = 'Start Recording';
             document.getElementById('recordBtn').classList.remove('active');
-            if (animationId) {
-                cancelAnimationFrame(animationId);
-                animationId = null;
-            }
-            document.getElementById('videoProgress').style.width = '0%';
-            document.getElementById('progressText').textContent = 'Ready to record';
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressText').textContent = 'Ready';
         }
 
-        function recordTick() {
-            if (!isRecording) return;
-
-            var elapsed = (Date.now() - recordStartTime) / 1000;
-            var progress = Math.min(elapsed / recordDuration, 1);
-            document.getElementById('videoProgress').style.width = (progress * 100) + '%';
-
-            document.getElementById('progressText').textContent = formatTime(elapsed) + ' / ' + formatTime(recordDuration) + ' | Frame ' + recordFrame;
-
-            var targetZoom = 1e12;
-            var zoomProgress = progress * progress * progress;
-            zoom = Math.pow(targetZoom, zoomProgress);
-
-            updateCoords();
-            render();
-            recordFrame++;
-
-            if (elapsed >= recordDuration) {
-                document.getElementById('progressText').textContent = 'Complete! ' + recordFrame + ' frames captured.';
-                isRecording = false;
-                document.getElementById('recordBtn').textContent = 'Start Recording';
-                document.getElementById('recordBtn').classList.remove('active');
-                return;
-            }
-
-            animationId = requestAnimationFrame(recordTick);
+        function recLoop() {
+            if (!isRec) return;
+            const t = (Date.now() - recStart) / 1000;
+            const prog = Math.min(t / recDur, 1);
+            document.getElementById('progressBar').style.width = (prog * 100) + '%';
+            document.getElementById('progressText').textContent = fmtTime(t) + ' / ' + fmtTime(recDur) + ' | Frame ' + frame;
+            zoom = Math.pow(1e12, prog * prog * prog);
+            updateCoords(); render(); frame++;
+            if (t >= recDur) { stopRec(); document.getElementById('progressText').textContent = 'Done! ' + frame + ' frames'; return; }
+            setTimeout(recLoop, 30);
         }
 
-        function formatTime(seconds) {
-            var mins = Math.floor(seconds / 60);
-            var secs = Math.floor(seconds % 60);
-            return mins + ':' + (secs < 10 ? '0' : '') + secs;
-        }
+        function fmtTime(s) { return Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0'); }
 
-        // Event listeners
-        document.getElementById('zoomInBtn').addEventListener('click', zoomIn);
-        document.getElementById('zoomOutBtn').addEventListener('click', zoomOut);
-        document.getElementById('resetBtn').addEventListener('click', resetView);
-        document.getElementById('recordBtn').addEventListener('click', function() {
-            if (isRecording) stopRecording();
-            else startRecording();
-        });
+        document.getElementById('zoomInBtn').onclick = zoomIn;
+        document.getElementById('zoomOutBtn').onclick = zoomOut;
+        document.getElementById('resetBtn').onclick = reset;
+        document.getElementById('recordBtn').onclick = () => isRec ? stopRec() : startRec();
 
-        document.querySelectorAll('.color-btn').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                setColorScheme(parseInt(this.dataset.color));
-            });
-        });
+        document.querySelectorAll('.color-btn').forEach(b => b.onclick = () => setScheme(parseInt(b.dataset.c)));
+        document.querySelectorAll('.preset-btn').forEach(b => b.onclick = () => goPreset(b.dataset.p));
 
-        document.querySelectorAll('.preset-btn').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                goToPreset(this.dataset.preset);
-            });
-        });
-
-        document.getElementById('iterations').addEventListener('input', function() {
-            maxIterations = parseInt(this.value);
-            document.getElementById('iterVal').textContent = maxIterations;
+        document.getElementById('iterations').oninput = function() {
+            maxIter = parseInt(this.value);
+            document.getElementById('iterVal').textContent = maxIter;
             render();
-        });
+        };
+        document.getElementById('duration').oninput = function() { recDur = parseInt(this.value); document.getElementById('durVal').textContent = recDur; };
+        document.getElementById('speed').oninput = function() { recSpeed = parseFloat(this.value); document.getElementById('speedVal').textContent = recSpeed.toFixed(1) + 'x'; };
 
-        document.getElementById('duration').addEventListener('input', function() {
-            recordDuration = parseInt(this.value);
-            document.getElementById('durationVal').textContent = recordDuration;
-        });
+        let drag = false, lastX, lastY;
+        canvas.onmousedown = e => { drag = true; lastX = e.clientX; lastY = e.clientY; };
+        canvas.onmousemove = e => {
+            if (!drag || isRec) return;
+            const ar = W / H, ry = 3 / zoom, rx = ry * ar;
+            cx -= ((e.clientX - lastX) / W) * rx;
+            cy -= ((e.clientY - lastY) / H) * ry;
+            lastX = e.clientX; lastY = e.clientY;
+            updateCoords(); render();
+        };
+        canvas.onmouseup = canvas.onmouseleave = () => drag = false;
 
-        document.getElementById('speed').addEventListener('input', function() {
-            recordSpeed = parseFloat(this.value);
-            document.getElementById('speedVal').textContent = recordSpeed.toFixed(1) + 'x';
-        });
-
-        // Mouse drag panning
-        var isDragging = false;
-        var lastX, lastY;
-
-        canvas.addEventListener('mousedown', function(e) {
-            isDragging = true;
-            lastX = e.clientX;
-            lastY = e.clientY;
-        });
-
-        canvas.addEventListener('mousemove', function(e) {
-            if (!isDragging || isRecording) return;
-            var dx = e.clientX - lastX;
-            var dy = e.clientY - lastY;
-            var aspectRatio = width / height;
-            var rangeY = 3 / zoom;
-            var rangeX = rangeY * aspectRatio;
-            centerX -= (dx / width) * rangeX;
-            centerY -= (dy / height) * rangeY;
-            lastX = e.clientX;
-            lastY = e.clientY;
-            updateCoords();
-            render();
-        });
-
-        canvas.addEventListener('mouseup', function() { isDragging = false; });
-        canvas.addEventListener('mouseleave', function() { isDragging = false; });
-
-        canvas.addEventListener('wheel', function(e) {
+        canvas.onwheel = e => {
             e.preventDefault();
-            if (isRecording) return;
+            if (isRec) return;
+            const zf = e.deltaY > 0 ? 0.9 : 1.1;
+            const ar = W / H, ry = 3 / zoom, rx = ry * ar;
+            const mx = e.offsetX, my = e.offsetY;
+            const x0 = cx - rx/2 + (mx/W)*rx, y0 = cy - ry/2 + (my/H)*ry;
+            zoom *= zf;
+            const ry2 = 3/zoom, rx2 = ry2 * ar;
+            cx = x0 + (mx/W)*rx2 - rx2/2;
+            cy = y0 + (my/H)*ry2 - ry2/2;
+            updateCoords(); render();
+        };
 
-            var zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-            var rect = canvas.getBoundingClientRect();
-            var mouseX = e.clientX - rect.left;
-            var mouseY = e.clientY - rect.top;
-            var aspectRatio = width / height;
-            var rangeY = 3 / zoom;
-            var rangeX = rangeY * aspectRatio;
-            var x0 = centerX - rangeX / 2 + (mouseX / width) * rangeX;
-            var y0 = centerY - rangeY / 2 + (mouseY / height) * rangeY;
+        updateCoords(); render();
 
-            zoom *= zoomFactor;
-
-            var newRangeY = 3 / zoom;
-            var newRangeX = newRangeY * aspectRatio;
-            centerX = x0 + (mouseX / width) * newRangeX - newRangeX / 2;
-            centerY = y0 + (mouseY / height) * newRangeY - newRangeY / 2;
-
-            updateCoords();
-            render();
-        });
-
-        // Initialize
-        createWorkers();
-        updateCoords();
-        render();
-        updateFPS();
-
-        // Listen for update status from main process
+        // Update status
         if (window.electronAPI) {
-            window.electronAPI.onUpdateStatus(function(data) {
-                console.log('Update status:', data);
-                var statusEl = document.getElementById('updateStatus');
-                if (typeof data === 'string') {
-                    statusEl.textContent = data;
-                    if (data.indexOf('error') !== -1 || data.indexOf('Error') !== -1) {
-                        statusEl.className = 'update-status error';
-                    } else if (data.indexOf('ready') !== -1 || data.indexOf('available') !== -1 || data.indexOf('downloading') !== -1) {
-                        statusEl.className = 'update-status success';
-                    } else {
-                        statusEl.className = 'update-status';
-                    }
-                } else if (data && data.status) {
-                    statusEl.textContent = data.status;
-                    if (data.status === 'error') {
-                        statusEl.className = 'update-status error';
-                    } else if (data.status === 'available' || data.status === 'ready') {
-                        statusEl.className = 'update-status success';
-                    } else {
-                        statusEl.className = 'update-status';
-                    }
-                }
-            });
-
-            window.electronAPI.getAppVersion().then(function(version) {
-                console.log('App version:', version);
-            });
+            window.electronAPI.onUpdateStatus(d => console.log('Update:', d));
+            window.electronAPI.getAppVersion().then(v => document.getElementById('updateStatus').textContent = 'v' + v);
         } else {
-            document.getElementById('updateStatus').textContent = 'Update system unavailable';
+            document.getElementById('updateStatus').textContent = 'Desktop app';
         }
     </script>
 </body>
