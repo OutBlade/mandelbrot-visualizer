@@ -401,9 +401,12 @@ function render(iterOverride) {
 }
 
 // Auto-scale iterations for animation: enough detail without GPU timeout
-// 200 at zoom=1, scales to ~400 at zoom=1e12 (safe for all GPUs)
+// Scale iterations with zoom depth so boundary detail stays visible.
+// ~100 * log10(zoom) is the empirical minimum for Mandelbrot boundary detail.
+// Capped at 1500 (safe on any GPU made after ~2015).
 function autoIter(z) {
-    return Math.min(400, Math.max(200, Math.round(100 + 25 * Math.log10(Math.max(z, 1)))));
+    var logz = Math.log10(Math.max(z, 1));
+    return Math.min(1500, Math.max(200, Math.round(100 * logz + 200)));
 }
 
 // --- Canvas resize -----------------------------------------------------------
@@ -541,9 +544,11 @@ function animLoop() {
     if (!isRec) return;
     var elapsed = (performance.now() - recStart) / 1000;
     var prog    = Math.min(elapsed / recDur, 1);
-    var eased   = prog * prog * prog;     // cubic ease-in: slow start, dramatic finish
 
-    zoom = Math.pow(1e12, eased);
+    // Linear in log-zoom space = constant zoom rate, exactly like YouTube deep-zoom videos.
+    // Max 1e11: that is the safe limit for our double-float precision (~15 sig. digits).
+    // Zooming past that produces blocking artefacts regardless of iteration count.
+    zoom = Math.pow(1e11, prog);
 
     document.getElementById('pbar').style.width = (prog * 100).toFixed(1) + '%';
     document.getElementById('ptext').textContent = fmtTime(elapsed) + ' / ' + fmtTime(recDur);
