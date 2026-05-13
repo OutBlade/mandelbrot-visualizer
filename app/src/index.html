@@ -145,7 +145,7 @@
     <div class="main">
         <div class="canvas-wrap">
             <canvas id="c"></canvas>
-            <div class="overlay"><span id="coords">-0.5 + 0i</span> &nbsp;|&nbsp; <span id="zoomInfo">1x</span></div>
+            <div class="overlay"><span id="coords">-0.5 + 0i</span> &nbsp;|&nbsp; <span id="zoomInfo">1x</span> &nbsp;|&nbsp; iter: <span id="iterInfo">-</span></div>
             <div class="fs-hint" id="fsHint">Press F or Esc to exit fullscreen</div>
         </div>
         <div class="sidebar">
@@ -176,8 +176,8 @@
                     <button class="cbtn" data-c="3">Grayscale</button>
                 </div>
                 <div class="slider" style="margin-top:9px">
-                    <div class="sl-label"><span>Iterations</span><span id="iterVal">200</span></div>
-                    <input type="range" id="iterSlider" min="50" max="2000" value="200" step="10">
+                    <div class="sl-label"><span>Max iterations</span><span id="iterVal">8000</span></div>
+                    <input type="range" id="iterSlider" min="500" max="20000" value="8000" step="500">
                 </div>
             </div>
             <div class="panel">
@@ -365,9 +365,15 @@ function splitDouble(x) {
 }
 
 // --- State -------------------------------------------------------------------
-var cx = -0.5, cy = 0, zoom = 1, maxIter = 200, scheme = 0;
+var cx = -0.5, cy = 0, zoom = 1, scheme = 0;
 var isRec = false, recStart = 0, recDur = 30;
 var animId = null, animTargetIdx = 0;
+
+// Progressive rendering state
+var PROG_INITIAL = 150;   // iter count used for instant display during interaction
+var PROG_MAX     = 8000;  // effectively infinite -- keep refining to this depth
+var progIter     = PROG_INITIAL;
+var progTimer    = null;
 
 // Preset views: [cx, cy, zoom]  -- all on the Mandelbrot boundary
 var PRESETS = {
@@ -388,25 +394,54 @@ var ANIM_TARGETS = [
 ];
 
 // --- Render ------------------------------------------------------------------
-function render(iterOverride) {
+function render(iter) {
     var cxs = splitDouble(cx);
     var cys = splitDouble(cy);
     gl.uniform2f(U.cx, cxs[0], cxs[1]);
     gl.uniform2f(U.cy, cys[0], cys[1]);
     gl.uniform1f(U.zoom, zoom);
-    gl.uniform1i(U.maxIter, iterOverride !== undefined ? iterOverride : maxIter);
+    gl.uniform1i(U.maxIter, iter);
     gl.uniform1i(U.scheme, scheme);
     gl.uniform2f(U.res, canvas.width, canvas.height);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
 
-// Auto-scale iterations for animation: enough detail without GPU timeout
-// Scale iterations with zoom depth so boundary detail stays visible.
-// ~100 * log10(zoom) is the empirical minimum for Mandelbrot boundary detail.
-// Capped at 1500 (safe on any GPU made after ~2015).
+// Auto-scale iterations for animation so boundary detail stays visible.
+// ~100 * log10(zoom) is the empirical minimum; capped at 1500.
 function autoIter(z) {
     var logz = Math.log10(Math.max(z, 1));
     return Math.min(1500, Math.max(200, Math.round(100 * logz + 200)));
+}
+
+// --- Progressive rendering ---------------------------------------------------
+// After every view change: render immediately at PROG_INITIAL (fast), then
+// automatically double iterations every ~120ms until PROG_MAX is reached.
+
+function stopProgressive() {
+    if (progTimer !== null) { clearTimeout(progTimer); progTimer = null; }
+}
+
+function scheduleNextStep() {
+    stopProgressive();
+    if (progIter >= PROG_MAX || isRec) return;
+    progTimer = setTimeout(function() {
+        progTimer = null;
+        if (isRec) return;
+        progIter = Math.min(PROG_MAX, progIter * 2);
+        render(progIter);
+        document.getElementById('iterInfo').textContent = progIter;
+        scheduleNextStep();
+    }, 120);
+}
+
+// Call after any view change (pan, zoom, preset, color).
+// Re-renders at low quality immediately and starts the refinement chain.
+function afterViewChange() {
+    stopProgressive();
+    progIter = PROG_INITIAL;
+    render(progIter);
+    document.getElementById('iterInfo').textContent = progIter;
+    scheduleNextStep();
 }
 
 // --- Canvas resize -----------------------------------------------------------
@@ -421,7 +456,7 @@ function resizeCanvas() {
         canvas.height = h;
         gl.viewport(0, 0, w, h);
     }
-    render();
+    afterViewChange();
 }
 new ResizeObserver(resizeCanvas).observe(canvas);
 
@@ -437,6 +472,7 @@ function updateHUD() {
     else if (z >= 1e3)  s = (z/1e3 ).toFixed(1)+'K';
     else                s = z.toFixed(1)+'x';
     document.getElementById('zoomInfo').textContent = s;
+    document.getElementById('iterInfo').textContent = progIter;
 }
 
 // --- View helpers ------------------------------------------------------------
@@ -451,26 +487,32 @@ function goPreset(name) {
     var p = PRESETS[name];
     if (!p) return;
     cx = p[0]; cy = p[1]; zoom = p[2];
-    updateHUD(); render();
+    updateHUD(); afterViewChange();
 }
 
 function reset() {
     stopRec();
     cx = -0.5; cy = 0; zoom = 1;
-    updateHUD(); render();
+    updateHUD(); afterViewChange();
 }
 
 // --- Mouse -------------------------------------------------------------------
 var drag = false;
-canvas.addEventListener('mousedown', function() { drag = true; });
-window.addEventListener('mouseup',   function() { drag = false; });
+canvas.addEventListener('mousedown', function() { drag = true; stopProgressive(); });
+window.addEventListener('mouseup', function() {
+    if (drag) { drag = false; afterViewChange(); }
+    else { drag = false; }
+});
 
 canvas.addEventListener('mousemove', function(e) {
     if (!drag || isRec) return;
     var v = viewSize();
     cx -= (e.movementX / canvas.clientWidth)  * v.rx;
     cy -= (e.movementY / canvas.clientHeight) * v.ry;
-    updateHUD(); render();
+    // During active drag: render at low quality for responsiveness
+    progIter = PROG_INITIAL;
+    render(progIter);
+    updateHUD();
 });
 
 canvas.addEventListener('wheel', function(e) {
@@ -482,15 +524,13 @@ canvas.addEventListener('wheel', function(e) {
     var cssH = canvas.clientHeight;
     var mx = e.offsetX / cssW;
     var my = e.offsetY / cssH;
-    // World point under cursor
     var wx = cx + (mx - 0.5) * v.rx;
     var wy = cy + (my - 0.5) * v.ry;
     zoom = Math.max(1, zoom * zf);
     var v2 = viewSize();
-    // Keep that world point stationary
     cx = wx - (mx - 0.5) * v2.rx;
     cy = wy - (my - 0.5) * v2.ry;
-    updateHUD(); render();
+    updateHUD(); afterViewChange();
 }, { passive: false });
 
 // --- Fullscreen --------------------------------------------------------------
@@ -516,7 +556,9 @@ function fmtTime(s) {
 }
 
 function startRec() {
-    stopRec();
+    stopProgressive();
+    isRec = false;
+    if (animId !== null) { cancelAnimationFrame(animId); animId = null; }
     var target = ANIM_TARGETS[animTargetIdx % ANIM_TARGETS.length];
     animTargetIdx++;
     // Navigate to this target and zoom from scratch
@@ -538,6 +580,8 @@ function stopRec() {
     document.getElementById('recBtn').classList.remove('active');
     document.getElementById('pbar').style.width = '0%';
     document.getElementById('ptext').textContent = 'Ready — each press zooms a different location';
+    // Resume progressive refinement at current view
+    afterViewChange();
 }
 
 function animLoop() {
@@ -556,19 +600,16 @@ function animLoop() {
     render(autoIter(zoom));
 
     if (prog >= 1) {
-        isRec  = false;
-        animId = null;
-        document.getElementById('recBtn').textContent = 'Start Zoom Animation';
-        document.getElementById('recBtn').classList.remove('active');
         document.getElementById('ptext').textContent = 'Done — press again for next location';
+        stopRec();  // also calls afterViewChange to refine the final frame
         return;
     }
     animId = requestAnimationFrame(animLoop);
 }
 
 // --- UI wiring ---------------------------------------------------------------
-document.getElementById('ziBtn').onclick  = function() { stopRec(); zoom = Math.max(1, zoom*1.5); updateHUD(); render(); };
-document.getElementById('zoBtn').onclick  = function() { stopRec(); zoom = Math.max(1, zoom/1.5); updateHUD(); render(); };
+document.getElementById('ziBtn').onclick  = function() { stopRec(); zoom = Math.max(1, zoom*1.5); updateHUD(); afterViewChange(); };
+document.getElementById('zoBtn').onclick  = function() { stopRec(); zoom = Math.max(1, zoom/1.5); updateHUD(); afterViewChange(); };
 document.getElementById('rstBtn').onclick = function() { reset(); };
 document.getElementById('recBtn').onclick = function() { if (isRec) stopRec(); else startRec(); };
 
@@ -581,14 +622,14 @@ document.querySelectorAll('.cbtn').forEach(function(b) {
         document.querySelectorAll('.cbtn').forEach(function(x) {
             x.classList.toggle('active', parseInt(x.dataset.c) === scheme);
         });
-        render();
+        afterViewChange();
     });
 });
 
 document.getElementById('iterSlider').addEventListener('input', function() {
-    maxIter = parseInt(this.value);
-    document.getElementById('iterVal').textContent = maxIter;
-    render();
+    PROG_MAX = parseInt(this.value);
+    document.getElementById('iterVal').textContent = PROG_MAX;
+    afterViewChange();
 });
 document.getElementById('durSlider').addEventListener('input', function() {
     recDur = parseInt(this.value);
