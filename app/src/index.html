@@ -384,7 +384,7 @@ canvas.addEventListener('mousemove', e => {
     if (!drag || isRec) return;
     const { rx, ry } = viewSize();
     cx -= (e.movementX / canvas.clientWidth)  * rx;
-    cy += (e.movementY / canvas.clientHeight) * ry;  // y_world down = same dir as screen y
+    cy -= (e.movementY / canvas.clientHeight) * ry;
     updateHUD(); render();
 });
 
@@ -401,14 +401,14 @@ canvas.addEventListener('wheel', e => {
 
     // World point under cursor
     const wx = cx + (mx - 0.5) * rx;
-    const wy = cy + (0.5 - my) * ry;
+    const wy = cy + (my - 0.5) * ry;
 
     zoom = Math.max(1, zoom * zf);
     const { rx: rx2, ry: ry2 } = viewSize();
 
     // Keep world point stationary under cursor
     cx = wx - (mx - 0.5) * rx2;
-    cy = wy - (0.5 - my) * ry2;
+    cy = wy - (my - 0.5) * ry2;
 
     updateHUD(); render();
 }, { passive: false });
