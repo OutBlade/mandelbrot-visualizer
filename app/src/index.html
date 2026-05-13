@@ -176,8 +176,8 @@
                     <button class="cbtn" data-c="3">Grayscale</button>
                 </div>
                 <div class="slider" style="margin-top:9px">
-                    <div class="sl-label"><span>Iterations</span><span id="iterVal">256</span></div>
-                    <input type="range" id="iterSlider" min="50" max="2000" value="256" step="10">
+                    <div class="sl-label"><span>Iterations</span><span id="iterVal">200</span></div>
+                    <input type="range" id="iterSlider" min="50" max="2000" value="200" step="10">
                 </div>
             </div>
             <div class="panel">
@@ -194,119 +194,162 @@
     </div>
 
 <script>
-// ─── WebGL 2 ──────────────────────────────────────────────────────────────────
-const canvas = document.getElementById('c');
-const gl = canvas.getContext('webgl2', { antialias: false });
+// NOTE: ALL strings passed to WebGL/GLSL must be ASCII only.
+// Non-ASCII characters (even in comments) can crash shader compilation on some drivers.
+
+var canvas = document.getElementById('c');
+var gl = canvas.getContext('webgl2', { antialias: false });
+
 if (!gl) {
-    document.body.innerHTML = '<div style="color:#f66;padding:30px">WebGL 2 not supported in this version of Electron.</div>';
-    throw new Error('no webgl2');
+    document.getElementById('ver').textContent = 'No WebGL2';
+    throw new Error('WebGL2 not available');
 }
 
-const VS = `#version 300 es
-in vec2 a_pos;
-void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }`;
+// Vertex shader: fullscreen quad
+var VS = '#version 300 es\n' +
+    'in vec2 a_pos;\n' +
+    'void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }\n';
 
-const FS = `#version 300 es
-precision highp float;
-out vec4 fragColor;
+// Fragment shader: Mandelbrot with double-float arithmetic (Veltkamp splitting).
+// All comments are ASCII. No Unicode characters anywhere in this string.
+var FS = '#version 300 es\n' +
+    'precision highp float;\n' +
+    'out vec4 fragColor;\n' +
+    'uniform vec2  u_cx;\n' +   // center.x as (hi, lo) double-float
+    'uniform vec2  u_cy;\n' +   // center.y as (hi, lo) double-float
+    'uniform float u_zoom;\n' +
+    'uniform int   u_maxIter;\n' +
+    'uniform int   u_scheme;\n' +
+    'uniform vec2  u_res;\n' +
 
-// Center passed as double-float (hi + lo) so deep zooms stay sharp
-uniform vec2  u_cx;       // center.x: (hi, lo)
-uniform vec2  u_cy;       // center.y: (hi, lo)
-uniform float u_zoom;
-uniform int   u_maxIter;
-uniform int   u_scheme;
-uniform vec2  u_res;
+    // TwoSum: exact split of a+b into (sum, error term)
+    'vec2 twosum(float a, float b) {\n' +
+    '    float s = a + b;\n' +
+    '    float v = s - a;\n' +
+    '    return vec2(s, (a - (s - v)) + (b - v));\n' +
+    '}\n' +
 
-// ── Double-float arithmetic ───────────────────────────────────────────────────
-// TwoSum: exact split of a+b into (result, error)
-vec2 ts(float a, float b) {
-    float s = a + b, v = s - a;
-    return vec2(s, (a-(s-v))+(b-v));
-}
-// TwoProduct via hardware FMA: exact split of a*b
-vec2 tp(float a, float b) {
-    float p = a * b;
-    return vec2(p, fma(a, b, -p));
-}
-vec2 df_add(vec2 a, vec2 b) { vec2 s=ts(a.x,b.x); s.y+=a.y+b.y; return ts(s.x,s.y); }
-vec2 df_sub(vec2 a, vec2 b) { return df_add(a, vec2(-b.x,-b.y)); }
-vec2 df_mul(vec2 a, vec2 b) { vec2 p=tp(a.x,b.x); p.y+=a.x*b.y+a.y*b.x; return ts(p.x,p.y); }
-// Exact multiply by 2 (just shift exponent)
-vec2 df_scale2(vec2 a) { return vec2(a.x*2.0, a.y*2.0); }
+    // TwoProduct via Veltkamp splitting (S=4097 = 2^12+1 for 23-bit mantissa).
+    // Splits each operand into 12+11 bit halves so hi*hi fits exactly in float32.
+    'vec2 twoprod(float a, float b) {\n' +
+    '    float s  = 4097.0 * a;\n' +
+    '    float ah = s - (s - a);\n' +
+    '    float al = a - ah;\n' +
+    '    s        = 4097.0 * b;\n' +
+    '    float bh = s - (s - b);\n' +
+    '    float bl = b - bh;\n' +
+    '    float p  = a * b;\n' +
+    '    return vec2(p, ((ah * bh - p) + ah * bl + al * bh) + al * bl);\n' +
+    '}\n' +
 
-// ── Coloring ──────────────────────────────────────────────────────────────────
-vec3 cospal(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
-    return clamp(a + b * cos(6.28318530 * (c * t + d)), 0.0, 1.0);
-}
-vec3 colorize(float t) {
-    if (u_scheme == 0)
-        return cospal(t, vec3(0.5), vec3(0.5), vec3(1.0,0.7,0.4), vec3(0.00,0.15,0.20));
-    if (u_scheme == 1)
-        return cospal(t, vec3(0.2,0.4,0.5), vec3(0.2,0.4,0.5), vec3(2.0,1.0,0.8), vec3(0.50,0.20,0.25));
-    if (u_scheme == 2)
-        return cospal(t, vec3(0.8,0.5,0.4), vec3(0.2,0.4,0.2), vec3(2.0,1.0,1.0), vec3(0.00,0.25,0.25));
-    return vec3(t * t);
-}
+    'vec2 df_add(vec2 a, vec2 b) {\n' +
+    '    vec2 r = twosum(a.x, b.x);\n' +
+    '    r.y += a.y + b.y;\n' +
+    '    return twosum(r.x, r.y);\n' +
+    '}\n' +
+    'vec2 df_sub(vec2 a, vec2 b) {\n' +
+    '    return df_add(a, vec2(-b.x, -b.y));\n' +
+    '}\n' +
+    'vec2 df_mul(vec2 a, vec2 b) {\n' +
+    '    vec2 p = twoprod(a.x, b.x);\n' +
+    '    p.y   += a.x * b.y + a.y * b.x;\n' +
+    '    return twosum(p.x, p.y);\n' +
+    '}\n' +
+    // Multiply by 2 is exact (shifts exponent, no rounding)
+    'vec2 df_x2(vec2 a) { return vec2(a.x * 2.0, a.y * 2.0); }\n' +
 
-void main() {
-    vec2 uv  = gl_FragCoord.xy / u_res;
-    float ar = u_res.x / u_res.y;
-    float ry = 3.0 / u_zoom;
-    float rx = ry * ar;
+    // Cosine color palette
+    'vec3 cospal(float t, vec3 a, vec3 b, vec3 c, vec3 d) {\n' +
+    '    return clamp(a + b * cos(6.28318530 * (c * t + d)), 0.0, 1.0);\n' +
+    '}\n' +
+    'vec3 colorize(float t) {\n' +
+    '    if (u_scheme == 0)\n' +
+    '        return cospal(t, vec3(0.5), vec3(0.5),\n' +
+    '                      vec3(1.0,0.7,0.4), vec3(0.00,0.15,0.20));\n' +
+    '    if (u_scheme == 1)\n' +
+    '        return cospal(t, vec3(0.2,0.4,0.5), vec3(0.2,0.4,0.5),\n' +
+    '                      vec3(2.0,1.0,0.8), vec3(0.50,0.20,0.25));\n' +
+    '    if (u_scheme == 2)\n' +
+    '        return cospal(t, vec3(0.8,0.5,0.4), vec3(0.2,0.4,0.2),\n' +
+    '                      vec3(2.0,1.0,1.0), vec3(0.00,0.25,0.25));\n' +
+    '    return vec3(t * t);\n' +
+    '}\n' +
 
-    // c = center + per-pixel offset, computed in double-float for precision
-    vec2 cx_df = df_add(u_cx, vec2((uv.x - 0.5) * rx, 0.0));
-    vec2 cy_df = df_add(u_cy, vec2((0.5 - uv.y) * ry, 0.0));
+    'void main() {\n' +
+    '    vec2  uv = gl_FragCoord.xy / u_res;\n' +
+    '    float ar = u_res.x / u_res.y;\n' +
+    '    float ry = 3.0 / u_zoom;\n' +
+    '    float rx = ry * ar;\n' +
+
+    // Compute c = center + per-pixel offset in double-float.
+    // This gives sub-float32 per-pixel differences needed for deep zooms.
+    '    vec2 cx = df_add(u_cx, vec2((uv.x - 0.5) * rx, 0.0));\n' +
+    '    vec2 cy = df_add(u_cy, vec2((0.5 - uv.y) * ry, 0.0));\n' +
 
     // Full double-float Mandelbrot iteration
-    vec2 zr = vec2(0.0), zi = vec2(0.0);
-    float esc = 0.0;
-    int iter = 0;
-    for (int i = 0; i < u_maxIter; i++) {
-        vec2 zr2 = df_mul(zr, zr);
-        vec2 zi2 = df_mul(zi, zi);
-        esc = zr2.x + zi2.x;
-        if (esc > 4.0) break;
-        vec2 new_zi = df_add(df_scale2(df_mul(zr, zi)), cy_df);
-        vec2 new_zr = df_add(df_sub(zr2, zi2), cx_df);
-        zr = new_zr; zi = new_zi;
-        iter++;
-    }
+    '    vec2 zr = vec2(0.0);\n' +
+    '    vec2 zi = vec2(0.0);\n' +
+    '    float esc = 0.0;\n' +
+    '    int iter = 0;\n' +
+    '    for (int i = 0; i < u_maxIter; i++) {\n' +
+    '        vec2 zr2 = df_mul(zr, zr);\n' +
+    '        vec2 zi2 = df_mul(zi, zi);\n' +
+    '        esc = zr2.x + zi2.x;\n' +
+    '        if (esc > 4.0) break;\n' +
+    '        vec2 nzi = df_add(df_x2(df_mul(zr, zi)), cy);\n' +
+    '        vec2 nzr = df_add(df_sub(zr2, zi2), cx);\n' +
+    '        zr = nzr; zi = nzi;\n' +
+    '        iter++;\n' +
+    '    }\n' +
 
-    if (iter == u_maxIter) { fragColor = vec4(0.02, 0.02, 0.06, 1.0); return; }
-
-    float log_zn     = log2(esc) * 0.5;
-    float nu         = log2(max(log_zn, 1e-10));
-    float smooth_iter = float(iter) + 1.0 - nu;
-    float t = fract(smooth_iter / 40.0);
-    fragColor = vec4(colorize(t), 1.0);
-}`;
+    '    if (iter == u_maxIter) {\n' +
+    '        fragColor = vec4(0.02, 0.02, 0.06, 1.0);\n' +
+    '        return;\n' +
+    '    }\n' +
+    '    float log_zn = log2(esc) * 0.5;\n' +
+    '    float nu     = log2(max(log_zn, 1e-10));\n' +
+    '    float si     = float(iter) + 1.0 - nu;\n' +
+    '    float t      = fract(si / 40.0);\n' +
+    '    fragColor = vec4(colorize(t), 1.0);\n' +
+    '}\n';
 
 function mkShader(type, src) {
-    const s = gl.createShader(type);
+    var s = gl.createShader(type);
     gl.shaderSource(s, src);
     gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
-        throw new Error(gl.getShaderInfoLog(s));
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        var err = gl.getShaderInfoLog(s);
+        console.error('Shader compile error:', err);
+        document.getElementById('ver').textContent = 'Shader Error';
+        throw new Error(err);
+    }
     return s;
 }
-const prog = gl.createProgram();
-gl.attachShader(prog, mkShader(gl.VERTEX_SHADER, VS));
-gl.attachShader(prog, mkShader(gl.FRAGMENT_SHADER, FS));
-gl.linkProgram(prog);
-if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
-    throw new Error(gl.getProgramInfoLog(prog));
-gl.useProgram(prog);
 
-const buf = gl.createBuffer();
+var prog;
+try {
+    prog = gl.createProgram();
+    gl.attachShader(prog, mkShader(gl.VERTEX_SHADER, VS));
+    gl.attachShader(prog, mkShader(gl.FRAGMENT_SHADER, FS));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        throw new Error(gl.getProgramInfoLog(prog));
+    }
+    gl.useProgram(prog);
+} catch(e) {
+    console.error('WebGL program error:', e);
+    document.getElementById('ver').textContent = 'GL Error';
+    throw e;
+}
+
+var buf = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, buf);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
-const aPos = gl.getAttribLocation(prog, 'a_pos');
+var aPos = gl.getAttribLocation(prog, 'a_pos');
 gl.enableVertexAttribArray(aPos);
 gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
-const U = {
+var U = {
     cx:      gl.getUniformLocation(prog, 'u_cx'),
     cy:      gl.getUniformLocation(prog, 'u_cy'),
     zoom:    gl.getUniformLocation(prog, 'u_zoom'),
@@ -315,54 +358,61 @@ const U = {
     res:     gl.getUniformLocation(prog, 'u_res'),
 };
 
-// Split JS double into float32 hi+lo so the shader can reconstruct full precision
+// Split a JS double into float32 hi+lo so the shader can recover full precision
 function splitDouble(x) {
-    const hi = Math.fround(x);
+    var hi = Math.fround(x);
     return [hi, x - hi];
 }
 
-// ─── State ────────────────────────────────────────────────────────────────────
-let cx = -0.5, cy = 0, zoom = 1, maxIter = 256, scheme = 0;
-let isRec = false, recStart = 0, recDur = 30;
-let animId = null;
+// --- State -------------------------------------------------------------------
+var cx = -0.5, cy = 0, zoom = 1, maxIter = 200, scheme = 0;
+var isRec = false, recStart = 0, recDur = 30;
+var animId = null, animTargetIdx = 0;
 
-const PRESETS = {
-    spiral:   [-0.7615740000, -0.0847596000, 60000],
-    seahorse: [-0.7436448927,  0.1318256397, 12000],
-    elephant: [ 0.3750010000,  0.0000010000,  9000],
-    valley:   [-0.1528000000, -1.0397000000,  5000],
-    triple:   [-0.0883499136,  0.6540067201, 12000],
-    crystal:  [-1.7691103756,  0.0042368479,  1200],
+// Preset views: [cx, cy, zoom]  -- all on the Mandelbrot boundary
+var PRESETS = {
+    spiral:   [-0.7615740,  -0.0847596,  60000],
+    seahorse: [-0.7436449,   0.1318256,  12000],
+    elephant: [ 0.3750010,   0.0000010,   9000],
+    valley:   [-0.1528000,  -1.0397000,   5000],
+    triple:   [-0.0883499,   0.6540067,  12000],
+    crystal:  [-1.7691104,   0.0042368,   1200],
 };
 
-// Curated boundary targets for the auto-zoom animation.
-// Each is a well-known filament / boundary point, NOT interior.
-const ANIM_TARGETS = [
+// Curated deep-zoom targets on the Mandelbrot boundary (filament / boundary points)
+var ANIM_TARGETS = [
     { cx: -0.7436448926608224, cy:  0.13182563972975655 },  // seahorse valley
     { cx: -0.0883499135516001, cy:  0.65400672006740000 },  // triple spiral
     { cx: -0.7615740000000000, cy: -0.08475960000000000 },  // double spiral arm
-    { cx: -1.7691103755551340, cy:  0.00423684791873677 },  // deep antenna tip
+    { cx: -1.7691103755551340, cy:  0.00423684791873677 },  // antenna tip
 ];
-let animTargetIdx = 0;
 
-// ─── Render ───────────────────────────────────────────────────────────────────
+// --- Render ------------------------------------------------------------------
 function render(iterOverride) {
-    const [cxhi, cxlo] = splitDouble(cx);
-    const [cyhi, cylo] = splitDouble(cy);
-    gl.uniform2f(U.cx, cxhi, cxlo);
-    gl.uniform2f(U.cy, cyhi, cylo);
+    var cxs = splitDouble(cx);
+    var cys = splitDouble(cy);
+    gl.uniform2f(U.cx, cxs[0], cxs[1]);
+    gl.uniform2f(U.cy, cys[0], cys[1]);
     gl.uniform1f(U.zoom, zoom);
-    gl.uniform1i(U.maxIter, iterOverride ?? maxIter);
+    gl.uniform1i(U.maxIter, iterOverride !== undefined ? iterOverride : maxIter);
     gl.uniform1i(U.scheme, scheme);
     gl.uniform2f(U.res, canvas.width, canvas.height);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
 
-// ─── Canvas resize ────────────────────────────────────────────────────────────
+// Auto-scale iterations for animation: enough detail without GPU timeout
+// 200 at zoom=1, scales to ~400 at zoom=1e12 (safe for all GPUs)
+function autoIter(z) {
+    return Math.min(400, Math.max(200, Math.round(100 + 25 * Math.log10(Math.max(z, 1)))));
+}
+
+// --- Canvas resize -----------------------------------------------------------
 function resizeCanvas() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = Math.round(canvas.clientWidth  * dpr);
-    const h = Math.round(canvas.clientHeight * dpr);
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.round(canvas.clientWidth  * dpr);
+    var h = Math.round(canvas.clientHeight * dpr);
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
     if (canvas.width !== w || canvas.height !== h) {
         canvas.width  = w;
         canvas.height = h;
@@ -372,13 +422,12 @@ function resizeCanvas() {
 }
 new ResizeObserver(resizeCanvas).observe(canvas);
 
-// ─── HUD ──────────────────────────────────────────────────────────────────────
+// --- HUD ---------------------------------------------------------------------
 function updateHUD() {
-    const sign = cy >= 0 ? '+' : '';
+    var sign = cy >= 0 ? '+' : '';
     document.getElementById('coords').textContent =
         cx.toFixed(7) + sign + cy.toFixed(7) + 'i';
-    const z = zoom;
-    let s;
+    var z = zoom, s;
     if      (z >= 1e12) s = (z/1e12).toFixed(1)+'T';
     else if (z >= 1e9)  s = (z/1e9 ).toFixed(1)+'B';
     else if (z >= 1e6)  s = (z/1e6 ).toFixed(1)+'M';
@@ -387,18 +436,18 @@ function updateHUD() {
     document.getElementById('zoomInfo').textContent = s;
 }
 
-// ─── View helpers ─────────────────────────────────────────────────────────────
+// --- View helpers ------------------------------------------------------------
 function viewSize() {
-    const ar = canvas.width / Math.max(canvas.height, 1);
-    const ry = 3 / zoom, rx = ry * ar;
-    return { rx, ry };
+    var ar = canvas.width / Math.max(canvas.height, 1);
+    var ry = 3 / zoom, rx = ry * ar;
+    return { rx: rx, ry: ry };
 }
 
 function goPreset(name) {
     stopRec();
-    const p = PRESETS[name];
+    var p = PRESETS[name];
     if (!p) return;
-    [cx, cy, zoom] = p;
+    cx = p[0]; cy = p[1]; zoom = p[2];
     updateHUD(); render();
 }
 
@@ -408,46 +457,41 @@ function reset() {
     updateHUD(); render();
 }
 
-// ─── Mouse ────────────────────────────────────────────────────────────────────
-let drag = false;
-canvas.addEventListener('mousedown', () => { drag = true; });
-window.addEventListener('mouseup',   () => { drag = false; });
+// --- Mouse -------------------------------------------------------------------
+var drag = false;
+canvas.addEventListener('mousedown', function() { drag = true; });
+window.addEventListener('mouseup',   function() { drag = false; });
 
-canvas.addEventListener('mousemove', e => {
+canvas.addEventListener('mousemove', function(e) {
     if (!drag || isRec) return;
-    const { rx, ry } = viewSize();
-    cx -= (e.movementX / canvas.clientWidth)  * rx;
-    cy -= (e.movementY / canvas.clientHeight) * ry;
+    var v = viewSize();
+    cx -= (e.movementX / canvas.clientWidth)  * v.rx;
+    cy -= (e.movementY / canvas.clientHeight) * v.ry;
     updateHUD(); render();
 });
 
-canvas.addEventListener('wheel', e => {
+canvas.addEventListener('wheel', function(e) {
     e.preventDefault();
     if (isRec) return;
-    const zf = e.deltaY > 0 ? 1 / 1.15 : 1.15;
-    const { rx, ry } = viewSize();
-
-    const cssW = canvas.clientWidth;
-    const cssH = canvas.clientHeight;
-    const mx = e.offsetX / cssW;   // 0..1 from left
-    const my = e.offsetY / cssH;   // 0..1 from top
-
+    var zf = e.deltaY > 0 ? 1 / 1.15 : 1.15;
+    var v  = viewSize();
+    var cssW = canvas.clientWidth;
+    var cssH = canvas.clientHeight;
+    var mx = e.offsetX / cssW;
+    var my = e.offsetY / cssH;
     // World point under cursor
-    const wx = cx + (mx - 0.5) * rx;
-    const wy = cy + (my - 0.5) * ry;
-
+    var wx = cx + (mx - 0.5) * v.rx;
+    var wy = cy + (my - 0.5) * v.ry;
     zoom = Math.max(1, zoom * zf);
-    const { rx: rx2, ry: ry2 } = viewSize();
-
-    // Keep world point stationary under cursor
-    cx = wx - (mx - 0.5) * rx2;
-    cy = wy - (my - 0.5) * ry2;
-
+    var v2 = viewSize();
+    // Keep that world point stationary
+    cx = wx - (mx - 0.5) * v2.rx;
+    cy = wy - (my - 0.5) * v2.ry;
     updateHUD(); render();
 }, { passive: false });
 
-// ─── Fullscreen ───────────────────────────────────────────────────────────────
-let fsMode = false;
+// --- Fullscreen --------------------------------------------------------------
+var fsMode = false;
 function toggleFS() {
     fsMode = !fsMode;
     document.body.classList.toggle('fs', fsMode);
@@ -456,32 +500,25 @@ function toggleFS() {
     document.getElementById('fsHint').style.display = fsMode ? 'block' : 'none';
     setTimeout(resizeCanvas, 30);
 }
-document.addEventListener('keydown', e => {
+document.addEventListener('keydown', function(e) {
     if (e.target.tagName === 'INPUT') return;
     if (e.key === 'f' || e.key === 'F') toggleFS();
     if (e.key === 'Escape' && fsMode)   toggleFS();
 });
 document.getElementById('fsBtn').onclick = toggleFS;
 
-// ─── Animation ────────────────────────────────────────────────────────────────
+// --- Animation ---------------------------------------------------------------
 function fmtTime(s) {
     return Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0');
 }
 
-// Auto-scale iterations so deep zooms show detail: 256 at zoom=1, ~1500 at zoom=1e12
-function autoIter(z) {
-    return Math.min(2000, Math.max(256, Math.round(120 + 100 * Math.log10(Math.max(z, 1)))));
-}
-
-let animTarget = ANIM_TARGETS[0];
-
 function startRec() {
     stopRec();
-    // Cycle through curated targets — each press picks the next one
-    animTarget = ANIM_TARGETS[animTargetIdx % ANIM_TARGETS.length];
+    var target = ANIM_TARGETS[animTargetIdx % ANIM_TARGETS.length];
     animTargetIdx++;
-    cx   = animTarget.cx;
-    cy   = animTarget.cy;
+    // Navigate to this target and zoom from scratch
+    cx   = target.cx;
+    cy   = target.cy;
     zoom = 1;
     recStart = performance.now();
     isRec = true;
@@ -493,7 +530,7 @@ function startRec() {
 
 function stopRec() {
     isRec = false;
-    if (animId) { cancelAnimationFrame(animId); animId = null; }
+    if (animId !== null) { cancelAnimationFrame(animId); animId = null; }
     document.getElementById('recBtn').textContent = 'Start Zoom Animation';
     document.getElementById('recBtn').classList.remove('active');
     document.getElementById('pbar').style.width = '0%';
@@ -502,19 +539,19 @@ function stopRec() {
 
 function animLoop() {
     if (!isRec) return;
-    const elapsed = (performance.now() - recStart) / 1000;
-    const prog  = Math.min(elapsed / recDur, 1);
-    const eased = prog * prog * prog;  // cubic: slow start, fast finish
+    var elapsed = (performance.now() - recStart) / 1000;
+    var prog    = Math.min(elapsed / recDur, 1);
+    var eased   = prog * prog * prog;     // cubic ease-in: slow start, dramatic finish
 
     zoom = Math.pow(1e12, eased);
 
-    document.getElementById('pbar').style.width = (prog * 100) + '%';
+    document.getElementById('pbar').style.width = (prog * 100).toFixed(1) + '%';
     document.getElementById('ptext').textContent = fmtTime(elapsed) + ' / ' + fmtTime(recDur);
     updateHUD();
-    render(autoIter(zoom));   // pass auto-scaled iteration count
+    render(autoIter(zoom));
 
     if (prog >= 1) {
-        isRec = false;
+        isRec  = false;
         animId = null;
         document.getElementById('recBtn').textContent = 'Start Zoom Animation';
         document.getElementById('recBtn').classList.remove('active');
@@ -524,44 +561,46 @@ function animLoop() {
     animId = requestAnimationFrame(animLoop);
 }
 
-// ─── UI wiring ────────────────────────────────────────────────────────────────
-document.getElementById('ziBtn').onclick  = () => { stopRec(); zoom = Math.max(1, zoom * 1.5); updateHUD(); render(); };
-document.getElementById('zoBtn').onclick  = () => { stopRec(); zoom = Math.max(1, zoom / 1.5); updateHUD(); render(); };
-document.getElementById('rstBtn').onclick = () => reset();
-document.getElementById('recBtn').onclick = () => isRec ? stopRec() : startRec();
+// --- UI wiring ---------------------------------------------------------------
+document.getElementById('ziBtn').onclick  = function() { stopRec(); zoom = Math.max(1, zoom*1.5); updateHUD(); render(); };
+document.getElementById('zoBtn').onclick  = function() { stopRec(); zoom = Math.max(1, zoom/1.5); updateHUD(); render(); };
+document.getElementById('rstBtn').onclick = function() { reset(); };
+document.getElementById('recBtn').onclick = function() { if (isRec) stopRec(); else startRec(); };
 
-document.querySelectorAll('.pbtn').forEach(b =>
-    b.addEventListener('click', () => goPreset(b.dataset.p)));
-
-document.querySelectorAll('.cbtn').forEach(b =>
-    b.addEventListener('click', () => {
+document.querySelectorAll('.pbtn').forEach(function(b) {
+    b.addEventListener('click', function() { goPreset(b.dataset.p); });
+});
+document.querySelectorAll('.cbtn').forEach(function(b) {
+    b.addEventListener('click', function() {
         scheme = parseInt(b.dataset.c);
-        document.querySelectorAll('.cbtn').forEach(x =>
-            x.classList.toggle('active', parseInt(x.dataset.c) === scheme));
+        document.querySelectorAll('.cbtn').forEach(function(x) {
+            x.classList.toggle('active', parseInt(x.dataset.c) === scheme);
+        });
         render();
-    }));
+    });
+});
 
-document.getElementById('iterSlider').addEventListener('input', function () {
+document.getElementById('iterSlider').addEventListener('input', function() {
     maxIter = parseInt(this.value);
     document.getElementById('iterVal').textContent = maxIter;
     render();
 });
-document.getElementById('durSlider').addEventListener('input', function () {
+document.getElementById('durSlider').addEventListener('input', function() {
     recDur = parseInt(this.value);
     document.getElementById('durVal').textContent = recDur;
 });
 
-// ─── Electron ─────────────────────────────────────────────────────────────────
+// --- Electron ----------------------------------------------------------------
 if (window.electronAPI) {
     window.electronAPI.getAppVersion()
-        .then(v => document.getElementById('ver').textContent = 'v' + v)
-        .catch(() => {});
-    window.electronAPI.onUpdateStatus(() => {});
+        .then(function(v) { document.getElementById('ver').textContent = 'v' + v; })
+        .catch(function() {});
+    window.electronAPI.onUpdateStatus(function() {});
 } else {
     document.getElementById('ver').textContent = 'Browser';
 }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
+// --- Init --------------------------------------------------------------------
 updateHUD();
 </script>
 </body>
