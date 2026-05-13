@@ -188,7 +188,7 @@
                     <input type="range" id="durSlider" min="10" max="180" value="30">
                 </div>
                 <div class="pbar-wrap"><div class="pbar" id="pbar"></div></div>
-                <div class="ptext" id="ptext">Ready — navigate to a spot then animate</div>
+                <div class="ptext" id="ptext">Ready — each press zooms a different location</div>
             </div>
         </div>
     </div>
@@ -210,28 +210,43 @@ const FS = `#version 300 es
 precision highp float;
 out vec4 fragColor;
 
-uniform vec2  u_center;
+// Center passed as double-float (hi + lo) so deep zooms stay sharp
+uniform vec2  u_cx;       // center.x: (hi, lo)
+uniform vec2  u_cy;       // center.y: (hi, lo)
 uniform float u_zoom;
 uniform int   u_maxIter;
 uniform int   u_scheme;
 uniform vec2  u_res;
 
+// ── Double-float arithmetic ───────────────────────────────────────────────────
+// TwoSum: exact split of a+b into (result, error)
+vec2 ts(float a, float b) {
+    float s = a + b, v = s - a;
+    return vec2(s, (a-(s-v))+(b-v));
+}
+// TwoProduct via hardware FMA: exact split of a*b
+vec2 tp(float a, float b) {
+    float p = a * b;
+    return vec2(p, fma(a, b, -p));
+}
+vec2 df_add(vec2 a, vec2 b) { vec2 s=ts(a.x,b.x); s.y+=a.y+b.y; return ts(s.x,s.y); }
+vec2 df_sub(vec2 a, vec2 b) { return df_add(a, vec2(-b.x,-b.y)); }
+vec2 df_mul(vec2 a, vec2 b) { vec2 p=tp(a.x,b.x); p.y+=a.x*b.y+a.y*b.x; return ts(p.x,p.y); }
+// Exact multiply by 2 (just shift exponent)
+vec2 df_scale2(vec2 a) { return vec2(a.x*2.0, a.y*2.0); }
+
+// ── Coloring ──────────────────────────────────────────────────────────────────
 vec3 cospal(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
     return clamp(a + b * cos(6.28318530 * (c * t + d)), 0.0, 1.0);
 }
-
 vec3 colorize(float t) {
     if (u_scheme == 0)
-        return cospal(t, vec3(0.5), vec3(0.5),
-                         vec3(1.0,0.7,0.4), vec3(0.00,0.15,0.20));
+        return cospal(t, vec3(0.5), vec3(0.5), vec3(1.0,0.7,0.4), vec3(0.00,0.15,0.20));
     if (u_scheme == 1)
-        return cospal(t, vec3(0.2,0.4,0.5), vec3(0.2,0.4,0.5),
-                         vec3(2.0,1.0,0.8), vec3(0.50,0.20,0.25));
+        return cospal(t, vec3(0.2,0.4,0.5), vec3(0.2,0.4,0.5), vec3(2.0,1.0,0.8), vec3(0.50,0.20,0.25));
     if (u_scheme == 2)
-        return cospal(t, vec3(0.8,0.5,0.4), vec3(0.2,0.4,0.2),
-                         vec3(2.0,1.0,1.0), vec3(0.00,0.25,0.25));
-    float g = t * t;
-    return vec3(g);
+        return cospal(t, vec3(0.8,0.5,0.4), vec3(0.2,0.4,0.2), vec3(2.0,1.0,1.0), vec3(0.00,0.25,0.25));
+    return vec3(t * t);
 }
 
 void main() {
@@ -240,31 +255,30 @@ void main() {
     float ry = 3.0 / u_zoom;
     float rx = ry * ar;
 
-    // y_world increases downward (matching original 2D-canvas convention)
-    float x = u_center.x + (uv.x - 0.5) * rx;
-    float y = u_center.y + (0.5 - uv.y) * ry;
+    // c = center + per-pixel offset, computed in double-float for precision
+    vec2 cx_df = df_add(u_cx, vec2((uv.x - 0.5) * rx, 0.0));
+    vec2 cy_df = df_add(u_cy, vec2((0.5 - uv.y) * ry, 0.0));
 
-    float zr = 0.0, zi = 0.0, zr2 = 0.0, zi2 = 0.0;
+    // Full double-float Mandelbrot iteration
+    vec2 zr = vec2(0.0), zi = vec2(0.0);
+    float esc = 0.0;
     int iter = 0;
     for (int i = 0; i < u_maxIter; i++) {
-        if (zr2 + zi2 > 4.0) break;
-        zi  = 2.0 * zr * zi + y;
-        zr  = zr2 - zi2 + x;
-        zr2 = zr * zr;
-        zi2 = zi * zi;
+        vec2 zr2 = df_mul(zr, zr);
+        vec2 zi2 = df_mul(zi, zi);
+        esc = zr2.x + zi2.x;
+        if (esc > 4.0) break;
+        vec2 new_zi = df_add(df_scale2(df_mul(zr, zi)), cy_df);
+        vec2 new_zr = df_add(df_sub(zr2, zi2), cx_df);
+        zr = new_zr; zi = new_zi;
         iter++;
     }
 
-    if (iter == u_maxIter) {
-        fragColor = vec4(0.02, 0.02, 0.06, 1.0);
-        return;
-    }
+    if (iter == u_maxIter) { fragColor = vec4(0.02, 0.02, 0.06, 1.0); return; }
 
-    // Smooth (continuous) iteration count via bailout smoothing
-    float log_zn      = log2(zr2 + zi2) * 0.5;        // log2(|z|)
-    float nu           = log2(max(log_zn, 1e-10));     // log2(log2(|z|))
-    float smooth_iter  = float(iter) + 1.0 - nu;
-
+    float log_zn     = log2(esc) * 0.5;
+    float nu         = log2(max(log_zn, 1e-10));
+    float smooth_iter = float(iter) + 1.0 - nu;
     float t = fract(smooth_iter / 40.0);
     fragColor = vec4(colorize(t), 1.0);
 }`;
@@ -293,33 +307,52 @@ gl.enableVertexAttribArray(aPos);
 gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
 const U = {
-    center:  gl.getUniformLocation(prog, 'u_center'),
+    cx:      gl.getUniformLocation(prog, 'u_cx'),
+    cy:      gl.getUniformLocation(prog, 'u_cy'),
     zoom:    gl.getUniformLocation(prog, 'u_zoom'),
     maxIter: gl.getUniformLocation(prog, 'u_maxIter'),
     scheme:  gl.getUniformLocation(prog, 'u_scheme'),
     res:     gl.getUniformLocation(prog, 'u_res'),
 };
 
+// Split JS double into float32 hi+lo so the shader can reconstruct full precision
+function splitDouble(x) {
+    const hi = Math.fround(x);
+    return [hi, x - hi];
+}
+
 // ─── State ────────────────────────────────────────────────────────────────────
 let cx = -0.5, cy = 0, zoom = 1, maxIter = 256, scheme = 0;
 let isRec = false, recStart = 0, recDur = 30;
-let recTargetCx = -0.5, recTargetCy = 0;
 let animId = null;
 
 const PRESETS = {
-    spiral:   [-0.7615740, -0.0847596, 60000],
-    seahorse: [-0.7450000,  0.1130000, 12000],
-    elephant: [ 0.2650000,  0.0010000,  9000],
-    valley:   [-0.1528000, -1.0397000,  5000],
-    triple:   [-0.0880000,  0.6540000, 12000],
-    crystal:  [-1.7680000,  0.0020000,  1200],
+    spiral:   [-0.7615740000, -0.0847596000, 60000],
+    seahorse: [-0.7436448927,  0.1318256397, 12000],
+    elephant: [ 0.3750010000,  0.0000010000,  9000],
+    valley:   [-0.1528000000, -1.0397000000,  5000],
+    triple:   [-0.0883499136,  0.6540067201, 12000],
+    crystal:  [-1.7691103756,  0.0042368479,  1200],
 };
 
+// Curated boundary targets for the auto-zoom animation.
+// Each is a well-known filament / boundary point, NOT interior.
+const ANIM_TARGETS = [
+    { cx: -0.7436448926608224, cy:  0.13182563972975655 },  // seahorse valley
+    { cx: -0.0883499135516001, cy:  0.65400672006740000 },  // triple spiral
+    { cx: -0.7615740000000000, cy: -0.08475960000000000 },  // double spiral arm
+    { cx: -1.7691103755551340, cy:  0.00423684791873677 },  // deep antenna tip
+];
+let animTargetIdx = 0;
+
 // ─── Render ───────────────────────────────────────────────────────────────────
-function render() {
-    gl.uniform2f(U.center, cx, cy);
+function render(iterOverride) {
+    const [cxhi, cxlo] = splitDouble(cx);
+    const [cyhi, cylo] = splitDouble(cy);
+    gl.uniform2f(U.cx, cxhi, cxlo);
+    gl.uniform2f(U.cy, cyhi, cylo);
     gl.uniform1f(U.zoom, zoom);
-    gl.uniform1i(U.maxIter, maxIter);
+    gl.uniform1i(U.maxIter, iterOverride ?? maxIter);
     gl.uniform1i(U.scheme, scheme);
     gl.uniform2f(U.res, canvas.width, canvas.height);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -435,10 +468,20 @@ function fmtTime(s) {
     return Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0');
 }
 
+// Auto-scale iterations so deep zooms show detail: 256 at zoom=1, ~1500 at zoom=1e12
+function autoIter(z) {
+    return Math.min(2000, Math.max(256, Math.round(120 + 100 * Math.log10(Math.max(z, 1)))));
+}
+
+let animTarget = ANIM_TARGETS[0];
+
 function startRec() {
     stopRec();
-    recTargetCx = cx;
-    recTargetCy = cy;
+    // Cycle through curated targets — each press picks the next one
+    animTarget = ANIM_TARGETS[animTargetIdx % ANIM_TARGETS.length];
+    animTargetIdx++;
+    cx   = animTarget.cx;
+    cy   = animTarget.cy;
     zoom = 1;
     recStart = performance.now();
     isRec = true;
@@ -454,29 +497,28 @@ function stopRec() {
     document.getElementById('recBtn').textContent = 'Start Zoom Animation';
     document.getElementById('recBtn').classList.remove('active');
     document.getElementById('pbar').style.width = '0%';
-    document.getElementById('ptext').textContent = 'Ready — navigate to a spot then animate';
+    document.getElementById('ptext').textContent = 'Ready — each press zooms a different location';
 }
 
 function animLoop() {
     if (!isRec) return;
     const elapsed = (performance.now() - recStart) / 1000;
     const prog  = Math.min(elapsed / recDur, 1);
-    const eased = prog * prog * prog;
+    const eased = prog * prog * prog;  // cubic: slow start, fast finish
 
-    zoom = Math.pow(1e10, eased);
-    cx   = recTargetCx;
-    cy   = recTargetCy;
+    zoom = Math.pow(1e12, eased);
 
     document.getElementById('pbar').style.width = (prog * 100) + '%';
     document.getElementById('ptext').textContent = fmtTime(elapsed) + ' / ' + fmtTime(recDur);
-    updateHUD(); render();
+    updateHUD();
+    render(autoIter(zoom));   // pass auto-scaled iteration count
 
     if (prog >= 1) {
         isRec = false;
         animId = null;
         document.getElementById('recBtn').textContent = 'Start Zoom Animation';
         document.getElementById('recBtn').classList.remove('active');
-        document.getElementById('ptext').textContent = 'Done';
+        document.getElementById('ptext').textContent = 'Done — press again for next location';
         return;
     }
     animId = requestAnimationFrame(animLoop);
